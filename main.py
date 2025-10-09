@@ -554,12 +554,12 @@ class LoRaChatApp:
             elif i == 3:
                 status_color = COLOR_GREEN if self.repeat_mode else COLOR_RED
             elif i == 4:
-                status_color = COLOR_GREEN if self.espnow_mode else COLOR_RED
-            elif i == 5:
                 status_color = save_status_color
 
             # 绘制设置值
-            Lcd.setTextColor(status_color if status_color is not None else base_color, COLOR_BLACK)
+            # 修复：确保在绘制 "Save to Conf" 时，使用正确的状态颜色
+            final_color = status_color if status_color is not None else base_color
+            Lcd.setTextColor(final_color, COLOR_BLACK)
             Lcd.drawString(str(value), WX + WW // 2 + x_offset, y_pos)
 
             y_pos += 20  # 适当增加行间距以提高可读性
@@ -656,13 +656,13 @@ class LoRaChatApp:
                     elif key == '/':
                         self.brightness = min(100, self.brightness + 10)
                     Lcd.setBrightness(self.brightness)
-                elif setting_to_edit == 2 and key == '\r':
+                elif setting_to_edit == 2 and key in ['\r','\n']:
                     self.ping_mode = not self.ping_mode
-                elif setting_to_edit == 3 and key == '\r':
+                elif setting_to_edit == 3 and key in ['\r','\n']:
                     self.repeat_mode = not self.repeat_mode
-                elif setting_to_edit == 4 and key == '\r':
+                elif setting_to_edit == 4 and key in ['\r','\n']:
                     self.toggle_espnow_mode()
-                elif setting_to_edit == 5 and key == '\r':
+                elif setting_to_edit == 5 and key in ['\r','\n']:
                     self.sd_write_stage = 1  # 标记为正在保存
                     if self.save_settings():
                         self.sd_write_stage = 2  # 成功
@@ -1216,15 +1216,6 @@ class LoRaChatApp:
 
     def save_settings(self):
         try:
-            # 检查SD卡是否已挂载
-            if not hasattr(self, 'sdcard_mounted') or not self.sdcard_mounted:
-                print("DEBUG: SD card not mounted. Cannot save settings.")
-                # 尝试重新初始化SD卡
-                self.initialize_sdcard()
-                if not self.sdcard_mounted:
-                    self.log_message("ERROR", "Cannot save: SD not available.")
-                    return False
-
             print("DEBUG: Saving settings to SD card...")
 
             # 确保目录存在
