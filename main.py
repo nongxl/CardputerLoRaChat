@@ -54,6 +54,8 @@ WX, WY, WW, WH = TW, SY + SH, W - TW, H - (SY + SH)
 # --- 其他常量 ---
 MIN_USERNAME_LENGTH = 2
 CONFIG_FILENAME = "/sd/LoRaChat/LoRaChat.conf"
+LOG_FILENAME = "/sd/LoRaChat/lorachat_log.txt"
+MAX_LOG_FILE_SIZE = 1024 * 100  # 100KB
 
 # --- 图标数据 ---
 transparencyColor = 0x0000
@@ -138,10 +140,20 @@ class LoRaChatApp:
         self.presences = []
         self.max_rssi = -1000
         self.battery_pct = 100
-        
-        # 初始化滚动状态
-        self.log_scroll_offset = 0
-        
+        self.nonce = 0 # 用于消息协议的Nonce
+
+        # 日志系统状态
+        self.sd_log_enabled = True
+        self.sdcard_mounted = False
+        self.log_page_index = 0
+        self.log_total_pages = 1
+        self.log_page_cache = []  # 用于缓存当前页的日志
+        self.log_tab_active = False # 标记日志标签页是否被激活
+
+        # 设置保存状态
+        self.sd_write_stage = 0  # 0: idle, 1: saving, 2: ok, 3: error
+        self.sd_write_status_reset_time = 0
+
         # 初始化日志系统
         self.log_messages = []
         self.max_log_messages = 20  # 最大日志消息数
@@ -304,6 +316,40 @@ class LoRaChatApp:
         elif index == 5:
             self._draw_icon(self.canvas_tab_bar, center_x, center_y + 4, logWidth, logHeight, logData)
 
+    def _get_wrapped_lines(self, text, max_width_pixels):
+        """
+        实现基于单词的文本换行，返回一个行列表。
+        """
+        lines = []
+        current_line = ""
+        words = text.split(' ')
+
+        if not words:
+            return []
+
+        Lcd.setFont(Widgets.FONTS.DejaVu9) # 确保使用正确的字体计算宽度
+
+        for word in words:
+            # 如果单词本身就超长，则强制截断
+            while Lcd.textWidth(word) > max_width_pixels:
+                # 找到能容纳的最大部分
+                for i in range(len(word), 0, -1):
+                    if Lcd.textWidth(word[:i]) <= max_width_pixels:
+                        lines.append(word[:i])
+                        word = word[i:]
+                        break
+            
+            if Lcd.textWidth(current_line + " " + word) <= max_width_pixels:
+                current_line += (" " if current_line else "") + word
+            else:
+                lines.append(current_line)
+                current_line = word
+        
+        if current_line:
+            lines.append(current_line)
+            
+        return lines
+
     def draw_main_window(self):
         # 直接使用Lcd绘制主窗口
         Lcd.fillRect(WX, WY, WW, WH, COLOR_BLACK)
@@ -324,39 +370,52 @@ class LoRaChatApp:
         row_count = (WH - 3 * M) // (font_h + M) - 1
         buffer_h = WH - ((font_h + M) * row_count) - M
         buffer_y = WY + WH - buffer_h + 2 * M
-        Lcd.drawLine(WX + 10, buffer_y, WX + WW - 10, buffer_y, COLOR_GRAY)
-        buffer_text = self.chat_tabs[self.active_tab_index]['buffer']
-        if buffer_text:
-            text_width = Lcd.textWidth(buffer_text)
-            Lcd.drawString(buffer_text, WX + WW - 2 * M - text_width, buffer_y + (buffer_h - font_h) // 2)
+
+        # 步骤 1: 先绘制历史消息
         messages = self.chat_tabs[self.active_tab_index]['messages']
-        if not messages: 
-            return
         lines_drawn = 0
         for msg in reversed(messages):
-            if lines_drawn >= row_count: 
+            if lines_drawn >= row_count:
                 break
+
             is_own = msg['username'] == ""
             text = msg['text'] if is_own else msg['username'] + ": " + msg['text']
-            max_chars = (WW - 4 * M) // 7
-            lines = [text[i:i + max_chars] for i in range(0, len(text), max_chars)]
+            lines = self._get_wrapped_lines(text, WW - 4 * M)
+
             for line in reversed(lines):
-                if lines_drawn >= row_count: 
+                if lines_drawn >= row_count:
                     break
                 cursor_y = WY + 2 * M + (row_count - lines_drawn - 1) * (font_h + M)
                 if is_own:
+                    # 修复：确保自己的消息是白色前景，并用主背景色填充背景
+                    Lcd.setTextColor(COLOR_WHITE, BG_COLOR)
                     text_width = Lcd.textWidth(line)
                     Lcd.drawString(line, WX + WW - 2 * M - text_width, cursor_y)
                 else:
-                    username_part = msg['username'] + ": "
-                    if line.startswith(username_part):
+                    # 仅在第一行高亮显示用户名
+                    is_first_line_of_msg = (line == lines[0])
+                    username_part = msg['username'] + ":"
+                    if is_first_line_of_msg and line.startswith(username_part):
                         username_width = Lcd.textWidth(username_part)
+                        Lcd.setTextColor(COLOR_YELLOW, COLOR_BLACK)
                         Lcd.drawString(username_part, WX + 2 * M, cursor_y)
-                        Lcd.drawRoundRect(WX + 2 * M - 2, cursor_y - 2, username_width, font_h + 4, 2, COLOR_YELLOW)
+                        Lcd.setTextColor(COLOR_WHITE, COLOR_BLACK)
                         Lcd.drawString(line[len(username_part):], WX + 2 * M + username_width, cursor_y)
                     else:
-                        Lcd.drawString(line, WX + 2 * M, cursor_y)
+                        # 确保后续行也是白色前景，黑色背景，以保持视觉一致性
+                        Lcd.setTextColor(COLOR_WHITE, BG_COLOR)
+                        Lcd.drawString(line, WX + 2 * M + Lcd.textWidth("  "), cursor_y) # 后续行缩进
                 lines_drawn += 1
+
+        # 步骤 2: 然后绘制输入框和输入文字
+        Lcd.drawLine(WX + 10, buffer_y, WX + WW - 10, buffer_y, COLOR_GRAY)
+        buffer_text = self.chat_tabs[self.active_tab_index]['buffer']
+        display_buffer = buffer_text.replace(' ', ' ')
+        if display_buffer:
+            # 明确设置输入文字的颜色和背景
+            Lcd.setTextColor(COLOR_WHITE, BG_COLOR)
+            text_width = Lcd.textWidth(display_buffer)
+            Lcd.drawString(display_buffer, WX + WW - 2 * M - text_width, buffer_y + (buffer_h - font_h) // 2)
 
     def draw_user_presence_window(self):
         # 直接使用Lcd绘制用户在线窗口，确保无背景色和一致的字体
@@ -409,7 +468,24 @@ class LoRaChatApp:
         Lcd.setTextColor(COLOR_WHITE, COLOR_BLACK)
         Lcd.drawString(title, WX + (WW - title_width) // 2, WY + 10)
         Lcd.drawLine(WX, WY + 25, WX + WW, WY + 25, COLOR_GRAY)
-        
+
+        # 检查并重置保存状态
+        if self.sd_write_stage in [2, 3] and time.ticks_diff(time.ticks_ms(), self.sd_write_status_reset_time) > 0:
+            self.sd_write_stage = 0
+
+        # 根据保存状态决定显示文本
+        save_status_text = "Press Enter"
+        save_status_color = None
+        if self.sd_write_stage == 1: # Saving (虽然很快，但可以预留)
+            save_status_text = "Saving..."
+            save_status_color = COLOR_YELLOW
+        elif self.sd_write_stage == 2: # OK
+            save_status_text = "OK!"
+            save_status_color = COLOR_GREEN
+        elif self.sd_write_stage == 3: # Error
+            save_status_text = "Error!"
+            save_status_color = COLOR_RED
+
         # 绘制设置项，采用与旧版本相同的布局
         settings_map = [
             ("Username", self.username),
@@ -417,7 +493,7 @@ class LoRaChatApp:
             ("Ping Mode", "On" if self.ping_mode else "Off"),
             ("Repeat Mode", "On" if self.repeat_mode else "Off"),
             ("ESP-NOW Mode", "On" if self.espnow_mode else "Off"),
-            ("Save to Conf", "Press Enter")
+            ("Save to Conf", save_status_text)
         ]
         
         # 实现滚动功能
@@ -464,6 +540,8 @@ class LoRaChatApp:
                 status_color = COLOR_GREEN if self.repeat_mode else COLOR_RED
             elif i == 4:
                 status_color = COLOR_GREEN if self.espnow_mode else COLOR_RED
+            elif i == 5:
+                status_color = save_status_color
             
             # 绘制设置值
             Lcd.setTextColor(status_color if status_color is not None else base_color, COLOR_BLACK)
@@ -476,145 +554,102 @@ class LoRaChatApp:
         Lcd.setFont(Widgets.FONTS.DejaVu12)
 
     def draw_log_window(self):
-        # 直接使用Lcd绘制日志窗口，确保无背景色和一致的字体
-        
-        # 先清除整个窗口背景
         Lcd.fillRect(WX, WY, WW, WH, COLOR_BLACK)
-        
-        # 设置统一字体
         Lcd.setFont(Widgets.FONTS.DejaVu9)
-        
-        # 绘制标题 - 居中显示，并确保文本背景与窗口背景一致
-        title = "Message Log"
-        title_width = Lcd.textWidth(title)
         Lcd.setTextColor(COLOR_WHITE, COLOR_BLACK)
+
+        title = "SD Card Log"
+        title_width = Lcd.textWidth(title)
         Lcd.drawString(title, WX + (WW - title_width) // 2, WY + 10)
         Lcd.drawLine(WX, WY + 25, WX + WW, WY + 25, COLOR_GRAY)
-        
-        # 如果没有日志消息，显示提示
-        if not self.log_messages:
-            no_msg_text = "No messages received yet"
-            no_msg_width = Lcd.textWidth(no_msg_text)
-            Lcd.setTextColor(COLOR_WHITE, COLOR_BLACK)
-            Lcd.drawString(no_msg_text, WX + (WW - no_msg_width) // 2, WY + 40)
-            Lcd.setTextColor(COLOR_WHITE)
-            Lcd.setFont(Widgets.FONTS.DejaVu12)
+
+        if not self.sdcard_mounted:
+            Lcd.drawString("SD Card not mounted.", WX + 10, WY + 40)
             return
-        
-        # 实现滚动功能
-        line_height = 12
-        visible_lines = (WH - 35) // line_height  # 可见行数
-        
-        # 创建滚动位置属性（如果不存在）
-        if not hasattr(self, 'log_scroll_offset'):
-            self.log_scroll_offset = 0
-        
-        # 确保滚动偏移量有效
-        max_offset = max(0, len(self.log_messages) - visible_lines)
-        self.log_scroll_offset = min(self.log_scroll_offset, max_offset)
-        
-        # 绘制滚动条
-        if len(self.log_messages) > visible_lines:
-            scrollbar_width = 4
-            scrollbar_height = max(10, (WH - 30) * visible_lines // len(self.log_messages))
-            scrollbar_y = WY + 30 + (WH - 30 - scrollbar_height) * self.log_scroll_offset // max_offset
-            Lcd.fillRect(WX + WW - scrollbar_width - 2, WY + 30, scrollbar_width, WH - 30, COLOR_DARKGRAY)
-            Lcd.fillRect(WX + WW - scrollbar_width - 2, scrollbar_y, scrollbar_width, scrollbar_height, UX_COLOR_ACCENT)
-        
-        # 绘制可见的日志消息
-        y_offset = WY + WH - 10
-        start_idx = len(self.log_messages) - visible_lines - self.log_scroll_offset
-        start_idx = max(0, start_idx)
-        
-        for message in self.log_messages[start_idx:start_idx + visible_lines]:
-            y_offset -= line_height
-            if y_offset < WY + 35:  # 预留标题区域
-                break
-            
-            # 清除行背景
-            Lcd.fillRect(WX, y_offset, WW, line_height, COLOR_BLACK)
-            # 截断过长的消息以适应屏幕宽度
-            max_chars = (WW - 20) // 5  # 估计每个字符的宽度
-            if len(message) > max_chars:
-                message = message[:max_chars] + "..."
-            
-            # 确保文本颜色为白色，背景为黑色
-            Lcd.setTextColor(COLOR_WHITE, COLOR_BLACK)
-            Lcd.drawString(message, WX + 10, y_offset)
-            
-        # 重置文本颜色和字体为默认值
-        Lcd.setTextColor(COLOR_WHITE)
-        Lcd.setFont(Widgets.FONTS.DejaVu12)
+
+        # 首次进入或需要刷新时加载日志
+        if self.log_tab_active:
+            self.load_log_page_from_sd(self.log_page_index)
+            self.log_tab_active = False # 重置标志，避免重复加载
+
+        if not self.log_page_cache:
+            Lcd.drawString("No log entries found.", WX + 10, WY + 40)
+        else:
+            y_pos = WY + 35
+            line_height = 12
+            lines_drawn = 0
+            max_lines = (WH - 50) // line_height
+            for log_entry in self.log_page_cache:
+                if lines_drawn >= max_lines: break
+                wrapped_lines = self._get_wrapped_lines(log_entry, WW - 20)
+                for line in wrapped_lines:
+                    if lines_drawn >= max_lines: break
+                    # 简单的颜色处理
+                    if "[ERROR]" in line:
+                        Lcd.setTextColor(COLOR_RED, COLOR_BLACK)
+                    elif "[WARN]" in line:
+                        Lcd.setTextColor(COLOR_YELLOW, COLOR_BLACK)
+                    else:
+                        Lcd.setTextColor(COLOR_WHITE, COLOR_BLACK)
+                    Lcd.drawString(line, WX + 10, y_pos)
+                    y_pos += line_height
+                    lines_drawn += 1
+
+        # 绘制页码和操作提示
+        Lcd.setTextColor(COLOR_SILVER, COLOR_BLACK)
+        page_info = f"Page {self.log_page_index + 1}/{self.log_total_pages}"
+        Lcd.drawString(page_info, WX + WW - Lcd.textWidth(page_info) - M, WY + WH - 15)
+        Lcd.drawString(",:Prev  /:Next  ␣:Refresh", WX + M, WY + WH - 15)
 
     def handle_input(self, key):
-        print(f"DEBUG: Key received: {repr(key)}")  # 添加调试信息
-        
+        print(f"DEBUG: Key received: {repr(key)}")
+
         if self.active_tab_index == 5:  # 日志窗口
-            # 日志窗口滚动控制
-            if key == '\r':  # 按回车返回设置窗口
-                self.active_tab_index = 4
+            if key == ',': # 上一页
+                if self.log_page_index > 0:
+                    self.log_page_index -= 1
+                    self.load_log_page_from_sd(self.log_page_index)
+                    self.redraw_flags |= 0b100
+            elif key == '/': # 下一页
+                if self.log_page_index < self.log_total_pages - 1:
+                    self.log_page_index += 1
+                    self.load_log_page_from_sd(self.log_page_index)
+                    self.redraw_flags |= 0b100
+            elif key == ' ': # 刷新到最新页
+                self.load_log_page_from_sd() # 不带参数加载最新页
                 self.redraw_flags |= 0b100
-            elif key == ';':  # 向上滚动
-                if hasattr(self, 'log_scroll_offset'):
-                    self.log_scroll_offset = max(0, self.log_scroll_offset - 1)
-                    self.redraw_flags |= 0b100
-            elif key == '.':  # 向下滚动
-                if hasattr(self, 'log_scroll_offset') and hasattr(self, 'log_messages'):
-                    visible_lines = (WH - 35) // 12
-                    max_offset = max(0, len(self.log_messages) - visible_lines)
-                    self.log_scroll_offset = min(self.log_scroll_offset + 1, max_offset)
-                    self.redraw_flags |= 0b100
+
         elif self.active_tab_index == 4:  # 设置窗口
-            settings_count = 6  # 与旧版本一致，共6个设置项
+            settings_count = 6
             
-            # 使用;和.选择设置项
             if key == ';':
-                print("DEBUG: Previous setting selected")
                 self.active_setting_index = (self.active_setting_index - 1 + settings_count) % settings_count
                 self.redraw_flags |= 0b100
             elif key == '.':
-                print("DEBUG: Next setting selected")
                 self.active_setting_index = (self.active_setting_index + 1) % settings_count
                 self.redraw_flags |= 0b100
             else:
-                # 根据当前选中的设置项处理输入
                 setting_to_edit = self.active_setting_index
-                if setting_to_edit == 0:  # 用户名设置
-                    if key == '\x08':  # 退格键
-                        self.username = self.username[:-1]
-                        print(f"DEBUG: Username edited: {self.username}")
-                    elif len(key) == 1 and len(self.username) < 8:  # 普通字符键
-                        self.username += key
-                        print(f"DEBUG: Username edited: {self.username}")
-                elif setting_to_edit == 1:  # 亮度设置
-                    if key == ',':  # 亮度降低
-                        print(f"DEBUG: Brightness down: {self.brightness} -> {max(0, self.brightness - 10)}")
-                        self.brightness = max(0, self.brightness - 10)
-                        Lcd.setBrightness(self.brightness)
-                    if key == '/':  # 亮度增加
-                        print(f"DEBUG: Brightness up: {self.brightness} -> {min(100, self.brightness + 10)}")
-                        self.brightness = min(100, self.brightness + 10)
-                        Lcd.setBrightness(self.brightness)
-                elif setting_to_edit == 2:  # Ping模式
-                    if key == '\r':  # 回车键切换
-                        print(f"DEBUG: Ping mode toggled: {self.ping_mode} -> {not self.ping_mode}")
-                        self.ping_mode = not self.ping_mode
-                elif setting_to_edit == 3:  # Repeat模式
-                    if key == '\r':  # 回车键切换
-                        print(f"DEBUG: Repeat mode toggled: {self.repeat_mode} -> {not self.repeat_mode}")
-                        self.repeat_mode = not self.repeat_mode
-                elif setting_to_edit == 4:  # 通信模式
-                    if key == '\r':  # 回车键切换
-                        print(f"DEBUG: Communication mode toggled")
-                        self.toggle_espnow_mode()
-                elif setting_to_edit == 5:  # 保存配置
-                    if key == '\r':  # 回车键保存
-                        print(f"DEBUG: Saving settings")
-                        self.save_settings()
+                if setting_to_edit == 0:
+                    if key == '\x08': self.username = self.username[:-1]
+                    elif len(key) == 1 and len(self.username) < 8: self.username += key
+                elif setting_to_edit == 1:
+                    if key == ',': self.brightness = max(0, self.brightness - 10)
+                    elif key == '/': self.brightness = min(100, self.brightness + 10)
+                    Lcd.setBrightness(self.brightness)
+                elif setting_to_edit == 2 and key == '\r': self.ping_mode = not self.ping_mode
+                elif setting_to_edit == 3 and key == '\r': self.repeat_mode = not self.repeat_mode
+                elif setting_to_edit == 4 and key == '\r': self.toggle_espnow_mode()
+                elif setting_to_edit == 5 and key == '\r':
+                    self.sd_write_stage = 1 # 标记为正在保存
+                    if self.save_settings():
+                        self.sd_write_stage = 2 # 成功
+                    else:
+                        self.sd_write_stage = 3 # 失败
+                    self.sd_write_status_reset_time = time.ticks_add(time.ticks_ms(), 2000) # 2秒后重置
                 
-                # 如果有任何设置被修改，触发重绘
-                if setting_to_edit >= 0:
-                    self.redraw_flags |= 0b101
+                self.redraw_flags |= 0b101
+
         elif 0 <= self.active_tab_index <= 2:  # 聊天窗口
             buffer = self.chat_tabs[self.active_tab_index]['buffer']
             if key == '\r':
@@ -632,109 +667,294 @@ class LoRaChatApp:
         # 修正：即使是空消息 (Ping)，也应该被记录下来，以保持逻辑一致性并避免崩溃。
         # C++ 版本虽然不显示 Ping，但它在逻辑上处理了空消息的发送。
         msg = {'username': "", 'text': text, 'is_espnow': self.espnow_mode}
-        self.chat_tabs[channel]['messages'].append(msg)
-        payload = "{}:{}".format(self.username, text)
+        # 只有在当前活跃的标签页是消息发送的频道时，才将自己的消息加入显示列表
+        if self.active_tab_index == channel:
+            self.chat_tabs[channel]['messages'].append(msg)
+
+        # 构建二进制消息帧
+        self.nonce = (self.nonce + 1) & 0x3F # Nonce自增并保持在6位范围内
+        header = (channel << 6) | self.nonce
+        payload = bytes([header]) + self.username.encode('utf-8') + b'\x00' + text.encode('utf-8')
+
         if self.espnow_mode and self.espnow:
             self.espnow.send(b'\xff' * 6, payload)
         elif self.lora:
-            # 修正: LoRaE220 库的 send 方法需要字节串(bytes), 而不是字符串(str)。
-            # 这是导致从SD卡加载配置后程序崩溃的根本原因。
-            self.lora.send(0xFFFF, channel, payload.encode('utf-8'))
+            self.lora.send(0xFFFF, 0, payload) # LoRa频道使用默认的0
         self.last_tx_time = time.ticks_ms()
         self.redraw_flags |= 0b100
 
     def handle_received_message(self, sender, message, rssi):
         # 打印所有接收到的原始报文，包括噪声
-        print("Received raw packet: {}, RSSI: {}".format(message, rssi))
-
-        # 将原始报文添加到日志中（无论是否可解码）
-        timestamp = time.localtime()
-        time_str = f"{timestamp[3]:02d}:{timestamp[4]:02d}:{timestamp[5]:02d}"
-        raw_log_entry = f"[{time_str}] RAW: {message}, RSSI: {rssi}"
-        self.log_messages.append(raw_log_entry)
-        # 保持日志长度不超过20条
-        if len(self.log_messages) > self.max_log_messages:
-            self.log_messages.pop(0)
+        self.log_message("RAW", f"Packet: {message}, RSSI: {rssi}")
 
         try:
-            # 步骤 1: 尝试解码。如果数据不是有效的UTF-8（例如噪声），则会失败。
-            decoded_text = message.decode('utf-8')
+            # 步骤 1: 解析二进制消息帧
+            if len(message) < 2:
+                self.log_message("DEBUG", f"Packet too short: {message}")
+                return
+
+            header = message[0]
+            channel = header >> 6
+            # nonce = header & 0x3F # Nonce暂时不用
+
+            # 修复：允许频道3（Ping消息），但只处理0-3的频道
+            if not (0 <= channel <= 3):
+                self.log_message("DEBUG", f"Invalid channel {channel} in packet, dropping.")
+                return
+
+            payload = message[1:]
+            null_pos = payload.find(b'\x00')
+
+            if null_pos == -1:
+                self.log_message("DEBUG", "Invalid frame, no null terminator")
+                return
+
+            # 将解码操作单独放在try-except块中，以更精确地捕获噪声
+            username = payload[:null_pos].decode('utf-8')
+            text = payload[null_pos + 1:].decode('utf-8')
+
         except UnicodeError:
-            # 步骤 2: 如果解码失败，则认为是噪声，打印一条信息并直接返回。
-            print("Received non-utf8 data (noise), ignoring: {}".format(message))
+            # 如果只是解码失败，很可能是噪声
+            self.log_message("DEBUG", f"Noise or non-UTF8 packet ignored: {message}")
+            return
+        except IndexError as e:
+            # 如果是其他结构性问题（如切片越界），则记录为解析错误
+            self.log_message("DEBUG", f"Frame parse error: {e} on data: {message}")
             return
 
         try:
             self.last_rx_time = time.ticks_ms()
             self.max_rssi = rssi if rssi > self.max_rssi else self.max_rssi
-            parts = decoded_text.split(':', 1)
-            if len(parts) == 2:
-                username, text = parts
-                if not text and not self.repeat_mode: 
-                    return
-                msg = {'username': username, 'text': text, 'rssi': rssi, 'is_espnow': self.espnow_mode}
-                self.chat_tabs[0]['messages'].append(msg)
+            
+            # 如果是Ping消息（频道3或文本为空），则只更新在线状态后返回
+            # 同时，如果处于中继模式，则不忽略空文本消息
+            is_ping = (channel == 3) or (not text and not self.repeat_mode)
+            if is_ping:
+                if channel == 3:
+                    self.log_message("DEBUG", f"Ping received from {username}")
+                # 但仍然更新用户在线状态
+                self.update_presence(username, rssi)
+                return
+
+            # 将消息添加到对应的频道
+            msg = {'username': username, 'text': text, 'rssi': rssi, 'is_espnow': self.espnow_mode}
+            self.chat_tabs[channel]['messages'].append(msg)
+
+            # 如果当前正显示该频道，则触发重绘
+            if self.active_tab_index == channel:
                 self.redraw_flags |= 0b100
-                if self.repeat_mode:
-                    response = "rp:{}|{}|{}".format(username, text, rssi)
-                    self.send_message(0, response)
-                found = False
-                for p in self.presences:
-                    if p['username'] == username:
-                        p['rssi'] = rssi
-                        p['last_seen'] = time.ticks_ms()
-                        found = True
-                        break
-                if not found:
-                    self.presences.append({'username': username, 'rssi': rssi, 'last_seen': time.ticks_ms()})
-                
-                # 将解码后的消息添加到日志中
-                decoded_log_entry = f"[{time_str}] {username}: {text}"
-                self.log_messages.append(decoded_log_entry)
-                # 保持日志长度不超过20条
-                if len(self.log_messages) > self.max_log_messages:
-                    self.log_messages.pop(0)
+
+            # 中继模式处理
+            if self.repeat_mode:
+                response = "rp:{}|{}|{}".format(username, text, rssi)
+                self.send_message(0, response) # 中继消息默认发到A频道
+
+            # 更新用户在线状态
+            self.update_presence(username, rssi)
+            
+            # 将解码后的消息添加到日志中
+            self.log_message("INFO", f"CH{chr(ord('A')+channel)}| {username}: {text}")
+
         except Exception as e:
-            print("Message processing error: {} on data: {}".format(e, message))
+            self.log_message("ERROR", f"Msg processing error: {e} on data: {message}")
+
+    def update_presence(self, username, rssi):
+        """更新用户在线状态列表"""
+        found = False
+        for p in self.presences:
+            if p['username'] == username:
+                p['rssi'] = rssi
+                p['last_seen'] = time.ticks_ms()
+                found = True
+                break
+        if not found:
+            self.presences.append({'username': username, 'rssi': rssi, 'last_seen': time.ticks_ms()})
+
+    def log_message(self, level, message):
+        """中心化的日志记录函数"""
+        timestamp = time.localtime()
+        time_str = f"{timestamp[3]:02d}:{timestamp[4]:02d}:{timestamp[5]:02d}"
+        log_entry = f"[{time_str}][{level}] {message}"
+        
+        # 打印到串口
+        print(log_entry)
+        
+        # 添加到内存日志 (用于旧的日志窗口，可逐步废弃)
+        self.log_messages.append(log_entry)
+        if len(self.log_messages) > self.max_log_messages:
+            self.log_messages.pop(0)
+            
+        # 写入SD卡
+        self.log_to_sd(log_entry)
+
+    def log_to_sd(self, log_entry):
+        """将单条日志追加到SD卡文件"""
+        if not self.sdcard_mounted or not self.sd_log_enabled:
+            return
+        try:
+            # 检查文件大小，如果超过限制则清空
+            try:
+                stat = uos.stat(LOG_FILENAME)
+                if stat[6] > MAX_LOG_FILE_SIZE:
+                    with open(LOG_FILENAME, 'w') as f:
+                        f.write(f"--- Log Cleared (size > {MAX_LOG_FILE_SIZE // 1024}KB) ---\n")
+            except OSError:
+                # 文件不存在，忽略
+                pass
+
+            with open(LOG_FILENAME, 'a') as f:
+                f.write(log_entry + '\n')
+        except Exception as e:
+            print(f"ERROR: Failed to write to SD log: {e}")
+
+    def load_log_page_from_sd(self, page_index=-1):
+        """从SD卡加载指定页的日志"""
+        if not self.sdcard_mounted:
+            self.log_page_cache = []
+            return
+
+        line_height = 12
+        visible_lines = (WH - 50) // line_height
+        self.log_page_cache = []
+
+        try:
+            # 健壮性改进：先检查文件是否存在
+            uos.stat(LOG_FILENAME)
+        except OSError:
+            # 文件不存在，设置提示信息并返回
+            self.log_page_cache = ["Log file not found."]
+            self.log_total_pages = 1
+            self.log_page_index = 0
+            return
+
+        try:
+            # 内存优化：逐行读取文件以计算总行数，避免一次性加载整个文件
+            total_lines = 0
+            with open(LOG_FILENAME, 'rb') as f: # 以二进制模式读取
+                for _ in f:
+                    total_lines += 1
+
+            self.log_total_pages = (total_lines + visible_lines - 1) // visible_lines if total_lines > 0 else 1
+
+            if page_index == -1: # 加载最后一页
+                self.log_page_index = self.log_total_pages - 1
+            else:
+                self.log_page_index = min(page_index, self.log_total_pages - 1)
+            
+            start_line = self.log_page_index * visible_lines
+
+            # 再次打开文件，并逐行读取以获取目标页的内容
+            with open(LOG_FILENAME, 'rb') as f: # 以二进制模式读取
+                current_line_num = 0
+                for byte_line in f:
+                    if current_line_num >= start_line:
+                        if len(self.log_page_cache) < visible_lines:
+                            try:
+                                # 手动解码，并忽略无法解码的行
+                                self.log_page_cache.append(byte_line.strip().decode('utf-8'))
+                            except UnicodeError:
+                                self.log_page_cache.append("[... unreadable log entry ...]")
+                        else:
+                            break # 当前页已满
+                    current_line_num += 1
+
+        except Exception as e:
+            # 使用 sys.print_exception 来获取更详细的错误信息，这在内存不足时更可靠
+            import sys
+            print("ERROR: Failed to load log page. Exception details:")
+            sys.print_exception(e)  # 这会将完整的错误堆栈跟踪打印到 Web-REPL
+            # 在屏幕上显示具体的异常类型
+            self.log_page_cache = [f"Error loading log:", f"{type(e).__name__}"]
 
     def lora_cb(self, data, rssi):
         if data:
-            # 将消息添加到日志中
-            timestamp = time.localtime()
-            time_str = f"{timestamp[3]:02d}:{timestamp[4]:02d}:{timestamp[5]:02d}"
-            log_entry = f"[{time_str}] LoRa: RSSI: {rssi}"
-            self.log_messages.append(log_entry)
-            # 保持日志长度不超过20条
-            if len(self.log_messages) > self.max_log_messages:
-                self.log_messages.pop(0)
+            self.log_message("LORA", f"RSSI: {rssi}")
             self.handle_received_message(None, data, rssi)
 
     def espnow_cb(self, mac, msg):
         if msg:
             try:
                 rssi = self.wifi_sta.status('rssi')
-                # 将消息添加到日志中
-                timestamp = time.localtime()
-                time_str = f"{timestamp[3]:02d}:{timestamp[4]:02d}:{timestamp[5]:02d}"
-                log_entry = f"[{time_str}] ESPNow: {mac.hex()}: RSSI: {rssi}"
-                self.log_messages.append(log_entry)
-                # 保持日志长度不超过20条
-                if len(self.log_messages) > self.max_log_messages:
-                    self.log_messages.pop(0)
+                self.log_message("ESP", f"From: {mac.hex()}, RSSI: {rssi}")
                 self.handle_received_message(mac, msg, rssi)
             except Exception as e:
                 print(f"ESPNow decode error: {e}")
 
     def kb_event_cb(self, event):
         key = self.kb.get_string()
-        if not key: 
+        if not key:
             return
+
         self.redraw_flags = 0
         if key == '\t':
             self.active_tab_index = (self.active_tab_index + 1) % 6  # 6个标签页
+
+            # 当切换到日志标签页时，设置一个标志来触发日志加载
+            if self.active_tab_index == 5:
+                self.log_tab_active = True
+
             self.redraw_flags |= 0b110
             return
         self.handle_input(key)
+
+    def save_screenshot(self):
+        if not self.sdcard_mounted:
+            self.log_message("ERROR", "Screenshot failed: SD not mounted.")
+            return
+
+        try:
+            # 寻找一个不重复的文件名
+            i = 0
+            while True:
+                filename = f"/sd/LoRaChat/screenshots/screenshot.{i}.bmp"
+                try:
+                    uos.stat(filename)
+                    i += 1
+                except OSError:
+                    # 文件不存在，这个文件名可用
+                    break
+
+            width = Lcd.width()
+            height = Lcd.height()
+
+            # BMP文件大小计算
+            row_size = (width * 3 + 3) & ~3  # 每行字节数必须是4的倍数
+            image_size = row_size * height
+            file_size = 54 + image_size
+
+            with open(filename, 'wb') as f:
+                # 写入BMP文件头 (54字节)
+                f.write(b'BM')  # 签名
+                f.write(file_size.to_bytes(4, 'little'))
+                f.write(b'\x00\x00\x00\x00')  # 保留
+                f.write((54).to_bytes(4, 'little'))  # 数据偏移
+
+                # 写入BMP信息头 (40字节)
+                f.write((40).to_bytes(4, 'little'))  # 信息头大小
+                f.write(width.to_bytes(4, 'little'))
+                f.write(height.to_bytes(4, 'little'))
+                f.write((1).to_bytes(2, 'little'))  # 颜色平面数
+                f.write((24).to_bytes(2, 'little')) # 每像素位数 (24位)
+                f.write(b'\x00\x00\x00\x00')  # 不压缩
+                f.write(image_size.to_bytes(4, 'little'))
+                f.write(b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00') # 分辨率等
+
+                # 逐像素读取并写入数据
+                # BMP的像素是从下到上存储的
+                for y in range(height - 1, -1, -1):
+                    row_data = bytearray()
+                    for x in range(width):
+                        pixel_color = Lcd.getPixel(x, y) # 获取RGB565颜色
+                        # 将RGB565转换为24位BGR
+                        b = (pixel_color & 0x001F) << 3
+                        g = (pixel_color & 0x07E0) >> 3
+                        r = (pixel_color & 0xF800) >> 8
+                        row_data.extend([b, g, r])
+                    f.write(row_data)
+
+            self.log_message("INFO", f"Screenshot saved to {filename}")
+        except Exception as e:
+            self.log_message("ERROR", f"Screenshot failed: {e}")
 
     def espnow_init(self):
         print("Initializing ESP-NOW...")
@@ -797,10 +1017,10 @@ class LoRaChatApp:
         Lcd.setFont(Widgets.FONTS.DejaVu12)
         Lcd.drawString("LoRaChat App", 10, 10)
         Lcd.drawString("Loading...", 10, 30)
-        
+
         # 初始化SD卡
         self.initialize_sdcard()
-        
+
         # 逐点绘制扳手图标，替换pushImage方法
         for row in range(wrenchHeight):
             for col in range(wrenchWidth):
@@ -808,7 +1028,7 @@ class LoRaChatApp:
                 color_pixel = wrenchData[idx]
                 if color_pixel != transparencyColor:
                     Lcd.drawPixel(10 + col, 50 + row, color_pixel)
-        
+
         try:
             self.kb = MatrixKeyboard()
             self.kb.set_callback(self.kb_event_cb)
@@ -831,29 +1051,21 @@ class LoRaChatApp:
         Lcd.drawString(f"Username: {self.username}", 10, 30)
         Lcd.drawString("Press TAB to change tabs", 10, 50)
         Lcd.drawString("A/B/C for chat windows", 10, 70)
-        
+
         print("DEBUG: Simple UI drawn. Setup complete.")
         return True
 
     def initialize_sdcard(self):
-        # 标记SD卡是否可用和挂载状态
-        self.sdcard_mounted = False
-        
         try:
             if not SDCARD_AVAILABLE:
                 print("DEBUG: SD card library not available. Skipping initialization.")
-                # 添加错误日志，提示用户需要从hardware导入sdcard
-                timestamp = time.localtime()
-                time_str = f"{timestamp[3]:02d}:{timestamp[4]:02d}:{timestamp[5]:02d}"
-                self.log_messages.append(f"[{time_str}] ERROR: SD card library not found. Make sure to import from hardware.")
-                if len(self.log_messages) > self.max_log_messages:
-                    self.log_messages.pop(0)
+                self.log_message("ERROR", "SD lib not found. Import from hardware.")
                 # 尝试从当前目录加载配置文件作为备选方案
                 self._try_load_config_from_alternate()
                 return
-                
+
             print("DEBUG: Initializing SD card for M5Cardputer using hardware library...")
-            
+
             # 使用正确的参数初始化SD卡，与uiflow网页端编程得到的代码一致
             try:
                 # 使用与CardputerCamera.py相同的初始化方式
@@ -876,7 +1088,7 @@ class LoRaChatApp:
                 # 尝试从当前目录加载配置文件作为备选方案
                 self._try_load_config_from_alternate()
                 return
-                
+
             # 检查并创建LoRaChat目录
             try:
                 uos.stat("/sd/LoRaChat")
@@ -890,7 +1102,16 @@ class LoRaChatApp:
                     # 尝试从当前目录加载配置文件作为备选方案
                     self._try_load_config_from_alternate()
                     return
-                    
+
+            # 创建截图文件夹
+            try:
+                uos.stat("/sd/LoRaChat/screenshots")
+            except OSError:
+                try:
+                    uos.mkdir("/sd/LoRaChat/screenshots")
+                except Exception as e:
+                    print(f"DEBUG: Failed to create screenshots directory: {e}")
+
             # 读取配置文件（如果存在）
             try:
                 print(f"DEBUG: Trying to read config from {CONFIG_FILENAME}")
@@ -929,20 +1150,15 @@ class LoRaChatApp:
                     self._try_load_config_from_alternate()
                 else:
                     print("DEBUG: Created default configuration file.")
-                
+
         except Exception as e:
             print(f"DEBUG: SD card initialization failed: {e}")
             import sys
-            sys.print_exception(e)  # 打印完整的异常栈跟踪
-            # 添加错误日志
-            timestamp = time.localtime()
-            time_str = f"{timestamp[3]:02d}:{timestamp[4]:02d}:{timestamp[5]:02d}"
-            self.log_messages.append(f"[{time_str}] ERROR initializing SD card: {str(e)}")
-            if len(self.log_messages) > self.max_log_messages:
-                self.log_messages.pop(0)
+            sys.print_exception(e)
+            self.log_message("ERROR", f"SD init failed: {e}")
             # 尝试从当前目录加载配置文件作为备选方案
             self._try_load_config_from_alternate()
-            
+
     def _try_load_config_from_alternate(self):
         """尝试从当前目录加载配置文件作为备选方案"""
         try:
@@ -974,7 +1190,7 @@ class LoRaChatApp:
             print("DEBUG: Configuration loaded from alternate location successfully.")
         except Exception as e2:
             print(f"DEBUG: Failed to load config from alternate location: {e2}")
-            
+
     def save_settings(self):
         try:
             # 检查SD卡是否已挂载
@@ -983,16 +1199,11 @@ class LoRaChatApp:
                 # 尝试重新初始化SD卡
                 self.initialize_sdcard()
                 if not self.sdcard_mounted:
-                    # 添加错误日志
-                    timestamp = time.localtime()
-                    time_str = f"{timestamp[3]:02d}:{timestamp[4]:02d}:{timestamp[5]:02d}"
-                    self.log_messages.append(f"[{time_str}] ERROR: SD card not available")
-                    if len(self.log_messages) > self.max_log_messages:
-                        self.log_messages.pop(0)
+                    self.log_message("ERROR", "Cannot save: SD not available.")
                     return False
-                    
+
             print("DEBUG: Saving settings to SD card...")
-            
+
             # 确保目录存在
             try:
                 uos.stat("/sd/LoRaChat")
@@ -1001,14 +1212,9 @@ class LoRaChatApp:
                     uos.mkdir("/sd/LoRaChat")
                     print("DEBUG: Created LoRaChat directory.")
                 except Exception as e:
-                    print(f"DEBUG: Failed to create LoRaChat directory: {e}")
-                    timestamp = time.localtime()
-                    time_str = f"{timestamp[3]:02d}:{timestamp[4]:02d}:{timestamp[5]:02d}"
-                    self.log_messages.append(f"[{time_str}] ERROR: Cannot create directory: {e}")
-                    if len(self.log_messages) > self.max_log_messages:
-                        self.log_messages.pop(0)
+                    self.log_message("ERROR", f"Cannot create dir: {e}")
                     return False
-                    
+
             # 格式化配置内容，与LoRaChat.conf格式完全一致
             config_content = (
                 f"username={self.username}\n"
@@ -1019,16 +1225,16 @@ class LoRaChatApp:
                 f"sdLogEnabled=on\n"
                 f"logOutputEnabled=on\n"
             )
-            
+
             print(f"DEBUG: Config content to save:\n{config_content}")
-            
+
             # 写入配置文件
             try:
                 # 尝试直接写入
                 with open(CONFIG_FILENAME, 'w') as f:
                     bytes_written = f.write(config_content)
                 print(f"DEBUG: Settings saved successfully. Wrote {bytes_written} bytes.")
-                
+
                 # 验证文件是否已创建
                 try:
                     stat_info = uos.stat(CONFIG_FILENAME)
@@ -1042,14 +1248,9 @@ class LoRaChatApp:
                         print(f"DEBUG: Failed to read back saved file: {e}")
                 except OSError:
                     print("DEBUG: WARNING: Config file was written but cannot be accessed.")
-                    
-                # 添加成功日志消息
-                timestamp = time.localtime()
-                time_str = f"{timestamp[3]:02d}:{timestamp[4]:02d}:{timestamp[5]:02d}"
-                self.log_messages.append(f"[{time_str}] Settings saved to {CONFIG_FILENAME}")
-                if len(self.log_messages) > self.max_log_messages:
-                    self.log_messages.pop(0)
-                
+
+                self.log_message("INFO", f"Settings saved to {CONFIG_FILENAME}")
+
                 return True
             except Exception as e:
                 print(f"DEBUG: Failed to write config file: {e}")
@@ -1062,32 +1263,26 @@ class LoRaChatApp:
                     with open(alt_config_path, 'w') as f:
                         f.write(config_content)
                     print(f"DEBUG: Saved settings to alternate location: {alt_config_path}")
-                    timestamp = time.localtime()
-                    time_str = f"{timestamp[3]:02d}:{timestamp[4]:02d}:{timestamp[5]:02d}"
-                    self.log_messages.append(f"[{time_str}] Settings saved to alternate location: {alt_config_path}")
-                    if len(self.log_messages) > self.max_log_messages:
-                        self.log_messages.pop(0)
+                    self.log_message("INFO", f"Settings saved to {alt_config_path}")
                     return True
                 except Exception as e2:
                     print(f"DEBUG: Also failed to save to alternate location: {e2}")
                 return False
-                
+
         except Exception as e:
             print(f"DEBUG: Unexpected error saving settings: {e}")
             import sys
             sys.print_exception(e)
-            # 添加错误日志
-            timestamp = time.localtime()
-            time_str = f"{timestamp[3]:02d}:{timestamp[4]:02d}:{timestamp[5]:02d}"
-            self.log_messages.append(f"[{time_str}] ERROR saving settings: {e}")
-            if len(self.log_messages) > self.max_log_messages:
-                self.log_messages.pop(0)
+            self.log_message("ERROR", f"Unexpected error saving settings: {e}")
             return False
 
     def loop(self):
         try:
             M5.update()
-            if self.kb: 
+            if M5.BtnA.wasPressed():
+                self.save_screenshot()
+
+            if self.kb:
                 self.kb.tick()
             now = time.ticks_ms()
             if time.ticks_diff(now, self.last_update_time) > 1000:
