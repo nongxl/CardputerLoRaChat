@@ -13,6 +13,7 @@ import gc
 # 尝试导入SD卡相关库
 try:
     from hardware import sdcard
+
     SDCARD_AVAILABLE = True
     print("DEBUG: SD card library imported successfully from hardware.")
 except ImportError as e:
@@ -62,16 +63,16 @@ transparencyColor = 0x0000
 wrenchWidth, wrenchHeight = 10, 10
 # 扳手图标数据 - 简化定义
 wrenchData = [
-    0,0,0,0,0,1,1,1,0,0,
-    0,0,0,0,1,1,1,0,0,0,
-    0,0,0,1,1,1,0,0,0,1,
-    0,0,0,1,1,1,0,0,1,1,
-    0,0,0,0,1,1,1,1,1,1,
-    0,0,0,1,1,1,1,1,1,0,
-    0,0,1,1,1,0,1,1,0,0,
-    0,1,1,1,0,0,0,0,0,0,
-    1,1,1,0,0,0,0,0,0,0,
-    1,1,0,0,0,0,0,0,0,0
+    0, 0, 0, 0, 0, 1, 1, 1, 0, 0,
+    0, 0, 0, 0, 1, 1, 1, 0, 0, 0,
+    0, 0, 0, 1, 1, 1, 0, 0, 0, 1,
+    0, 0, 0, 1, 1, 1, 0, 0, 1, 1,
+    0, 0, 0, 0, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 1, 1, 1, 1, 1, 1, 0,
+    0, 0, 1, 1, 1, 0, 1, 1, 0, 0,
+    0, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+    1, 1, 1, 0, 0, 0, 0, 0, 0, 0,
+    1, 1, 0, 0, 0, 0, 0, 0, 0, 0
 ]
 # 将0转换为透明色，1转换为绿色
 for i in range(len(wrenchData)):
@@ -79,16 +80,16 @@ for i in range(len(wrenchData)):
 userWidth, userHeight = 10, 10
 # 用户图标数据 - 简化定义
 userData = [
-    0,0,0,0,1,1,0,0,0,0,
-    0,0,0,1,1,1,1,0,0,0,
-    0,0,0,1,1,1,1,0,0,0,
-    0,0,0,0,1,1,0,0,0,0,
-    0,0,0,0,0,0,0,0,0,0,
-    0,0,0,1,1,1,1,0,0,0,
-    0,0,1,1,1,1,1,1,0,0,
-    0,0,1,1,1,1,1,1,0,0,
-    0,0,1,1,1,1,1,1,0,0,
-    0,0,1,1,1,1,1,1,0,0
+    0, 0, 0, 0, 1, 1, 0, 0, 0, 0,
+    0, 0, 0, 1, 1, 1, 1, 0, 0, 0,
+    0, 0, 0, 1, 1, 1, 1, 0, 0, 0,
+    0, 0, 0, 0, 1, 1, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 1, 1, 1, 1, 0, 0, 0,
+    0, 0, 1, 1, 1, 1, 1, 1, 0, 0,
+    0, 0, 1, 1, 1, 1, 1, 1, 0, 0,
+    0, 0, 1, 1, 1, 1, 1, 1, 0, 0,
+    0, 0, 1, 1, 1, 1, 1, 1, 0, 0
 ]
 # 将0转换为透明色，1转换为绿色
 for i in range(len(userData)):
@@ -97,20 +98,21 @@ for i in range(len(userData)):
 logWidth, logHeight = 10, 10
 # 日志图标数据 - 简化定义
 logData = [
-    0,0,0,0,0,0,0,0,0,0,
-    0,1,1,1,1,1,1,1,1,0,
-    0,1,0,0,0,0,0,0,1,0,
-    0,1,0,0,0,0,0,0,1,0,
-    0,1,0,0,0,0,0,0,1,0,
-    0,1,0,0,0,0,0,0,1,0,
-    0,1,1,1,1,1,1,1,1,0,
-    0,0,1,1,1,1,1,1,1,1,
-    0,0,0,0,0,0,0,0,0,0,
-    0,0,0,0,0,0,0,0,0,0
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 1, 1, 1, 1, 1, 1, 1, 1, 0,
+    0, 1, 0, 0, 0, 0, 0, 0, 1, 0,
+    0, 1, 0, 0, 0, 0, 0, 0, 1, 0,
+    0, 1, 0, 0, 0, 0, 0, 0, 1, 0,
+    0, 1, 0, 0, 0, 0, 0, 0, 1, 0,
+    0, 1, 1, 1, 1, 1, 1, 1, 1, 0,
+    0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 ]
 # 将0转换为透明色，1转换为绿色
 for i in range(len(logData)):
     logData[i] = transparencyColor if logData[i] == 0 else COLOR_GREEN
+
 
 class LoRaChatApp:
     def __init__(self):
@@ -122,7 +124,7 @@ class LoRaChatApp:
         self.canvas_system_bar = None
         self.canvas_tab_bar = None
         self.canvas_main_window = None
-        
+
         # 初始化交互状态
         self.active_tab_index = 0
         self.redraw_flags = 0b111
@@ -140,7 +142,7 @@ class LoRaChatApp:
         self.presences = []
         self.max_rssi = -1000
         self.battery_pct = 100
-        self.nonce = 0 # 用于消息协议的Nonce
+        self.nonce = 0  # 用于消息协议的Nonce
 
         # 日志系统状态
         self.sd_log_enabled = True
@@ -148,7 +150,7 @@ class LoRaChatApp:
         self.log_page_index = 0
         self.log_total_pages = 1
         self.log_page_cache = []  # 用于缓存当前页的日志
-        self.log_tab_active = False # 标记日志标签页是否被激活
+        self.log_tab_active = False  # 标记日志标签页是否被激活
 
         # 设置保存状态
         self.sd_write_stage = 0  # 0: idle, 1: saving, 2: ok, 3: error
@@ -227,18 +229,18 @@ class LoRaChatApp:
         Lcd.setTextColor(COLOR_SILVER, UX_COLOR_DARK)
         Lcd.setFont(Widgets.FONTS.DejaVu12)
         y_pos = SY + (SH - 12) // 2
-        
+
         # 绘制用户名
         Lcd.drawString(self.username, SX + 3 * M, y_pos)
-        
+
         # 绘制标题
         title = "EspNowChat" if self.espnow_mode else "LoRaChat"
         title_width = Lcd.textWidth(title)
         Lcd.drawString(title, SX + (SW - title_width) // 2, y_pos)
-        
+
         # 绘制信号强度指示器
         self._draw_rssi_indicator(SW - 70, SY + SH // 2, self.max_rssi)
-        
+
         # 绘制电池指示器
         self._draw_battery_indicator(SW - 30, SY + SH // 2, self.battery_pct)
 
@@ -250,18 +252,19 @@ class LoRaChatApp:
             tabm = 5
             color = UX_COLOR_ACCENT if i == self.active_tab_index else UX_COLOR_DARK
             taby = TY + tabm + i * tabh - i * M
-            
+
             # 绘制三角形和矩形
             Lcd.fillTriangle(TX + M, taby, TX + TW, taby, TX + TW, taby - tabm, color)
             Lcd.fillRect(TX + M, taby, TW - M, tabh - 2 * tabm, color)
-            Lcd.fillTriangle(TX + M, taby + tabh - 2 * tabm, TX + TW, taby + tabh - 2 * tabm, TX + TW, taby + tabh - tabm, color)
-            
+            Lcd.fillTriangle(TX + M, taby + tabh - 2 * tabm, TX + TW, taby + tabh - 2 * tabm, TX + TW,
+                             taby + tabh - tabm, color)
+
             # 绘制标签内容
             Lcd.setTextColor(COLOR_SILVER, color)
             Lcd.setFont(Widgets.FONTS.DejaVu9)
             center_x = TX + M + (TW - M) // 2
             center_y = taby + (tabh - 2 * tabm) // 2 - 4
-            
+
             if 0 <= i <= 2:
                 label = chr(ord('A') + i)
                 label_width = Lcd.textWidth(label)
@@ -273,7 +276,8 @@ class LoRaChatApp:
                         idx = row * userWidth + col
                         color_pixel = userData[idx]
                         if color_pixel != transparencyColor:
-                            Lcd.drawPixel(center_x - userWidth // 2 + col, center_y + 4 - userHeight // 2 + row, color_pixel)
+                            Lcd.drawPixel(center_x - userWidth // 2 + col, center_y + 4 - userHeight // 2 + row,
+                                          color_pixel)
             elif i == 4:
                 # 绘制扳手图标
                 for row in range(wrenchHeight):
@@ -281,7 +285,8 @@ class LoRaChatApp:
                         idx = row * wrenchWidth + col
                         color_pixel = wrenchData[idx]
                         if color_pixel != transparencyColor:
-                            Lcd.drawPixel(center_x - wrenchWidth // 2 + col, center_y + 4 - wrenchHeight // 2 + row, color_pixel)
+                            Lcd.drawPixel(center_x - wrenchWidth // 2 + col, center_y + 4 - wrenchHeight // 2 + row,
+                                          color_pixel)
             elif i == 5:
                 # 绘制日志图标
                 for row in range(logHeight):
@@ -289,7 +294,8 @@ class LoRaChatApp:
                         idx = row * logWidth + col
                         color_pixel = logData[idx]
                         if color_pixel != transparencyColor:
-                            Lcd.drawPixel(center_x - logWidth // 2 + col, center_y + 4 - logHeight // 2 + row, color_pixel)
+                            Lcd.drawPixel(center_x - logWidth // 2 + col, center_y + 4 - logHeight // 2 + row,
+                                          color_pixel)
 
     def _draw_tab(self, index):
         self.canvas_tab_bar.setFont(Widgets.FONTS.DejaVu9)
@@ -327,7 +333,7 @@ class LoRaChatApp:
         if not words:
             return []
 
-        Lcd.setFont(Widgets.FONTS.DejaVu9) # 确保使用正确的字体计算宽度
+        Lcd.setFont(Widgets.FONTS.DejaVu9)  # 确保使用正确的字体计算宽度
 
         for word in words:
             # 如果单词本身就超长，则强制截断
@@ -338,22 +344,22 @@ class LoRaChatApp:
                         lines.append(word[:i])
                         word = word[i:]
                         break
-            
+
             if Lcd.textWidth(current_line + " " + word) <= max_width_pixels:
                 current_line += (" " if current_line else "") + word
             else:
                 lines.append(current_line)
                 current_line = word
-        
+
         if current_line:
             lines.append(current_line)
-            
+
         return lines
 
     def draw_main_window(self):
         # 直接使用Lcd绘制主窗口
         Lcd.fillRect(WX, WY, WW, WH, COLOR_BLACK)
-        
+
         if 0 <= self.active_tab_index <= 2:
             self.draw_chat_window()
         elif self.active_tab_index == 3:
@@ -404,7 +410,7 @@ class LoRaChatApp:
                     else:
                         # 确保后续行也是白色前景，黑色背景，以保持视觉一致性
                         Lcd.setTextColor(COLOR_WHITE, BG_COLOR)
-                        Lcd.drawString(line, WX + 2 * M + Lcd.textWidth("  "), cursor_y) # 后续行缩进
+                        Lcd.drawString(line, WX + 2 * M + Lcd.textWidth("  "), cursor_y)  # 后续行缩进
                 lines_drawn += 1
 
         # 步骤 2: 然后绘制输入框和输入文字
@@ -419,20 +425,20 @@ class LoRaChatApp:
 
     def draw_user_presence_window(self):
         # 直接使用Lcd绘制用户在线窗口，确保无背景色和一致的字体
-        
+
         # 先清除整个窗口背景
         Lcd.fillRect(WX, WY, WW, WH, COLOR_BLACK)
-        
+
         # 设置统一字体
         Lcd.setFont(Widgets.FONTS.DejaVu9)
-        
+
         # 绘制标题 - 居中显示
         title = "Users Seen"
         title_width = Lcd.textWidth(title)
         Lcd.setTextColor(COLOR_WHITE, COLOR_BLACK)
         Lcd.drawString(title, WX + (WW - title_width) // 2, WY + 10)
         Lcd.drawLine(WX, WY + 25, WX + WW, WY + 25, COLOR_GRAY)
-        
+
         # 绘制用户列表
         y_pos = WY + 35
         for p in self.presences:
@@ -441,27 +447,27 @@ class LoRaChatApp:
             Lcd.setTextColor(COLOR_WHITE, COLOR_BLACK)
             Lcd.drawString(text, WX + 10, y_pos)
             y_pos += 15
-        
+
         # 如果没有用户在线，显示提示
         if not self.presences:
             no_users_text = "No users seen yet"
             no_users_width = Lcd.textWidth(no_users_text)
             Lcd.setTextColor(COLOR_WHITE, COLOR_BLACK)
             Lcd.drawString(no_users_text, WX + (WW - no_users_width) // 2, WY + 50)
-        
+
         # 重置文本颜色和字体为默认值
         Lcd.setTextColor(COLOR_WHITE)
         Lcd.setFont(Widgets.FONTS.DejaVu12)
 
     def draw_settings_window(self):
         # 直接使用Lcd绘制设置窗口，确保无背景色和一致的字体
-        
+
         # 先清除整个窗口背景
         Lcd.fillRect(WX, WY, WW, WH, COLOR_BLACK)
-        
+
         # 设置统一字体
         Lcd.setFont(Widgets.FONTS.DejaVu9)
-        
+
         # 绘制标题 - 居中显示，并确保文本背景与窗口背景一致
         title = "Settings"
         title_width = Lcd.textWidth(title)
@@ -476,13 +482,13 @@ class LoRaChatApp:
         # 根据保存状态决定显示文本
         save_status_text = "Press Enter"
         save_status_color = None
-        if self.sd_write_stage == 1: # Saving (虽然很快，但可以预留)
+        if self.sd_write_stage == 1:  # Saving (虽然很快，但可以预留)
             save_status_text = "Saving..."
             save_status_color = COLOR_YELLOW
-        elif self.sd_write_stage == 2: # OK
+        elif self.sd_write_stage == 2:  # OK
             save_status_text = "OK!"
             save_status_color = COLOR_GREEN
-        elif self.sd_write_stage == 3: # Error
+        elif self.sd_write_stage == 3:  # Error
             save_status_text = "Error!"
             save_status_color = COLOR_RED
 
@@ -495,41 +501,42 @@ class LoRaChatApp:
             ("ESP-NOW Mode", "On" if self.espnow_mode else "Off"),
             ("Save to Conf", save_status_text)
         ]
-        
+
         # 实现滚动功能
         visible_settings = 4  # 一次显示的设置项数量
         if len(settings_map) > visible_settings:
             # 计算滚动位置
             scroll_index = max(0, self.active_setting_index - visible_settings // 2)
             scroll_index = min(scroll_index, len(settings_map) - visible_settings)
-            
+
             # 绘制滚动条
             scrollbar_width = 4
             scrollbar_height = (WH - 30) * visible_settings // len(settings_map)
-            scrollbar_y = WY + 30 + (WH - 30 - scrollbar_height) * scroll_index // (len(settings_map) - visible_settings)
+            scrollbar_y = WY + 30 + (WH - 30 - scrollbar_height) * scroll_index // (
+                        len(settings_map) - visible_settings)
             Lcd.fillRect(WX + WW - scrollbar_width - 2, WY + 30, scrollbar_width, WH - 30, COLOR_DARKGRAY)
             Lcd.fillRect(WX + WW - scrollbar_width - 2, scrollbar_y, scrollbar_width, scrollbar_height, UX_COLOR_ACCENT)
-            
+
             # 只绘制可见的设置项
             start_idx = scroll_index
             end_idx = scroll_index + visible_settings
         else:
             start_idx = 0
             end_idx = len(settings_map)
-        
+
         y_pos = WY + 35
         x_offset = 15
-        
+
         for i in range(start_idx, end_idx):
             name, value = settings_map[i]
             base_color = COLOR_YELLOW if i == self.active_setting_index else COLOR_WHITE
-            
+
             # 绘制设置名称
             name_text = name + ':'
             name_width = Lcd.textWidth(name_text)
             Lcd.setTextColor(base_color, COLOR_BLACK)
             Lcd.drawString(name_text, WX + WW // 2 - 8 - name_width + x_offset, y_pos)
-            
+
             # 根据设置类型设置不同的文本颜色
             status_color = None
             if i == 0:
@@ -542,13 +549,13 @@ class LoRaChatApp:
                 status_color = COLOR_GREEN if self.espnow_mode else COLOR_RED
             elif i == 5:
                 status_color = save_status_color
-            
+
             # 绘制设置值
             Lcd.setTextColor(status_color if status_color is not None else base_color, COLOR_BLACK)
             Lcd.drawString(str(value), WX + WW // 2 + x_offset, y_pos)
-            
+
             y_pos += 20  # 适当增加行间距以提高可读性
-        
+
         # 重置文本颜色和字体为默认值
         Lcd.setTextColor(COLOR_WHITE)
         Lcd.setFont(Widgets.FONTS.DejaVu12)
@@ -570,7 +577,7 @@ class LoRaChatApp:
         # 首次进入或需要刷新时加载日志
         if self.log_tab_active:
             self.load_log_page_from_sd(self.log_page_index)
-            self.log_tab_active = False # 重置标志，避免重复加载
+            self.log_tab_active = False  # 重置标志，避免重复加载
 
         if not self.log_page_cache:
             Lcd.drawString("No log entries found.", WX + 10, WY + 40)
@@ -605,23 +612,23 @@ class LoRaChatApp:
         print(f"DEBUG: Key received: {repr(key)}")
 
         if self.active_tab_index == 5:  # 日志窗口
-            if key == ',': # 上一页
+            if key == ',':  # 上一页
                 if self.log_page_index > 0:
                     self.log_page_index -= 1
                     self.load_log_page_from_sd(self.log_page_index)
                     self.redraw_flags |= 0b100
-            elif key == '/': # 下一页
+            elif key == '/':  # 下一页
                 if self.log_page_index < self.log_total_pages - 1:
                     self.log_page_index += 1
                     self.load_log_page_from_sd(self.log_page_index)
                     self.redraw_flags |= 0b100
-            elif key == ' ': # 刷新到最新页
-                self.load_log_page_from_sd() # 不带参数加载最新页
+            elif key == ' ':  # 刷新到最新页
+                self.load_log_page_from_sd()  # 不带参数加载最新页
                 self.redraw_flags |= 0b100
 
         elif self.active_tab_index == 4:  # 设置窗口
             settings_count = 6
-            
+
             if key == ';':
                 self.active_setting_index = (self.active_setting_index - 1 + settings_count) % settings_count
                 self.redraw_flags |= 0b100
@@ -631,23 +638,30 @@ class LoRaChatApp:
             else:
                 setting_to_edit = self.active_setting_index
                 if setting_to_edit == 0:
-                    if key == '\x08': self.username = self.username[:-1]
-                    elif len(key) == 1 and len(self.username) < 8: self.username += key
+                    if key == '\x08':
+                        self.username = self.username[:-1]
+                    elif len(key) == 1 and len(self.username) < 8:
+                        self.username += key
                 elif setting_to_edit == 1:
-                    if key == ',': self.brightness = max(0, self.brightness - 10)
-                    elif key == '/': self.brightness = min(100, self.brightness + 10)
+                    if key == ',':
+                        self.brightness = max(0, self.brightness - 10)
+                    elif key == '/':
+                        self.brightness = min(100, self.brightness + 10)
                     Lcd.setBrightness(self.brightness)
-                elif setting_to_edit == 2 and key == '\r': self.ping_mode = not self.ping_mode
-                elif setting_to_edit == 3 and key == '\r': self.repeat_mode = not self.repeat_mode
-                elif setting_to_edit == 4 and key == '\r': self.toggle_espnow_mode()
+                elif setting_to_edit == 2 and key == '\r':
+                    self.ping_mode = not self.ping_mode
+                elif setting_to_edit == 3 and key == '\r':
+                    self.repeat_mode = not self.repeat_mode
+                elif setting_to_edit == 4 and key == '\r':
+                    self.toggle_espnow_mode()
                 elif setting_to_edit == 5 and key == '\r':
-                    self.sd_write_stage = 1 # 标记为正在保存
+                    self.sd_write_stage = 1  # 标记为正在保存
                     if self.save_settings():
-                        self.sd_write_stage = 2 # 成功
+                        self.sd_write_stage = 2  # 成功
                     else:
-                        self.sd_write_stage = 3 # 失败
-                    self.sd_write_status_reset_time = time.ticks_add(time.ticks_ms(), 2000) # 2秒后重置
-                
+                        self.sd_write_stage = 3  # 失败
+                    self.sd_write_status_reset_time = time.ticks_add(time.ticks_ms(), 2000)  # 2秒后重置
+
                 self.redraw_flags |= 0b101
 
         elif 0 <= self.active_tab_index <= 2:  # 聊天窗口
@@ -662,7 +676,7 @@ class LoRaChatApp:
             self.redraw_flags |= 0b100
 
     def send_message(self, channel, text):
-        if text is None: 
+        if text is None:
             return
         # 修正：即使是空消息 (Ping)，也应该被记录下来，以保持逻辑一致性并避免崩溃。
         # C++ 版本虽然不显示 Ping，但它在逻辑上处理了空消息的发送。
@@ -672,14 +686,14 @@ class LoRaChatApp:
             self.chat_tabs[channel]['messages'].append(msg)
 
         # 构建二进制消息帧
-        self.nonce = (self.nonce + 1) & 0x3F # Nonce自增并保持在6位范围内
+        self.nonce = (self.nonce + 1) & 0x3F  # Nonce自增并保持在6位范围内
         header = (channel << 6) | self.nonce
         payload = bytes([header]) + self.username.encode('utf-8') + b'\x00' + text.encode('utf-8')
 
         if self.espnow_mode and self.espnow:
             self.espnow.send(b'\xff' * 6, payload)
         elif self.lora:
-            self.lora.send(0xFFFF, 0, payload) # LoRa频道使用默认的0
+            self.lora.send(0xFFFF, 0, payload)  # LoRa频道使用默认的0
         self.last_tx_time = time.ticks_ms()
         self.redraw_flags |= 0b100
 
@@ -725,7 +739,7 @@ class LoRaChatApp:
         try:
             self.last_rx_time = time.ticks_ms()
             self.max_rssi = rssi if rssi > self.max_rssi else self.max_rssi
-            
+
             # 如果是Ping消息（频道3或文本为空），则只更新在线状态后返回
             # 同时，如果处于中继模式，则不忽略空文本消息
             is_ping = (channel == 3) or (not text and not self.repeat_mode)
@@ -747,13 +761,13 @@ class LoRaChatApp:
             # 中继模式处理
             if self.repeat_mode:
                 response = "rp:{}|{}|{}".format(username, text, rssi)
-                self.send_message(0, response) # 中继消息默认发到A频道
+                self.send_message(0, response)  # 中继消息默认发到A频道
 
             # 更新用户在线状态
             self.update_presence(username, rssi)
-            
+
             # 将解码后的消息添加到日志中
-            self.log_message("INFO", f"CH{chr(ord('A')+channel)}| {username}: {text}")
+            self.log_message("INFO", f"CH{chr(ord('A') + channel)}| {username}: {text}")
 
         except Exception as e:
             self.log_message("ERROR", f"Msg processing error: {e} on data: {message}")
@@ -775,15 +789,15 @@ class LoRaChatApp:
         timestamp = time.localtime()
         time_str = f"{timestamp[3]:02d}:{timestamp[4]:02d}:{timestamp[5]:02d}"
         log_entry = f"[{time_str}][{level}] {message}"
-        
+
         # 打印到串口
         print(log_entry)
-        
+
         # 添加到内存日志 (用于旧的日志窗口，可逐步废弃)
         self.log_messages.append(log_entry)
         if len(self.log_messages) > self.max_log_messages:
             self.log_messages.pop(0)
-            
+
         # 写入SD卡
         self.log_to_sd(log_entry)
 
@@ -830,21 +844,21 @@ class LoRaChatApp:
         try:
             # 内存优化：逐行读取文件以计算总行数，避免一次性加载整个文件
             total_lines = 0
-            with open(LOG_FILENAME, 'rb') as f: # 以二进制模式读取
+            with open(LOG_FILENAME, 'rb') as f:  # 以二进制模式读取
                 for _ in f:
                     total_lines += 1
 
             self.log_total_pages = (total_lines + visible_lines - 1) // visible_lines if total_lines > 0 else 1
 
-            if page_index == -1: # 加载最后一页
+            if page_index == -1:  # 加载最后一页
                 self.log_page_index = self.log_total_pages - 1
             else:
                 self.log_page_index = min(page_index, self.log_total_pages - 1)
-            
+
             start_line = self.log_page_index * visible_lines
 
             # 再次打开文件，并逐行读取以获取目标页的内容
-            with open(LOG_FILENAME, 'rb') as f: # 以二进制模式读取
+            with open(LOG_FILENAME, 'rb') as f:  # 以二进制模式读取
                 current_line_num = 0
                 for byte_line in f:
                     if current_line_num >= start_line:
@@ -855,7 +869,7 @@ class LoRaChatApp:
                             except UnicodeError:
                                 self.log_page_cache.append("[... unreadable log entry ...]")
                         else:
-                            break # 当前页已满
+                            break  # 当前页已满
                     current_line_num += 1
 
         except Exception as e:
@@ -934,17 +948,17 @@ class LoRaChatApp:
                 f.write(width.to_bytes(4, 'little'))
                 f.write(height.to_bytes(4, 'little'))
                 f.write((1).to_bytes(2, 'little'))  # 颜色平面数
-                f.write((24).to_bytes(2, 'little')) # 每像素位数 (24位)
+                f.write((24).to_bytes(2, 'little'))  # 每像素位数 (24位)
                 f.write(b'\x00\x00\x00\x00')  # 不压缩
                 f.write(image_size.to_bytes(4, 'little'))
-                f.write(b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00') # 分辨率等
+                f.write(b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')  # 分辨率等
 
                 # 逐像素读取并写入数据
                 # BMP的像素是从下到上存储的
                 for y in range(height - 1, -1, -1):
                     row_data = bytearray()
                     for x in range(width):
-                        pixel_color = Lcd.getPixel(x, y) # 获取RGB565颜色
+                        pixel_color = Lcd.getPixel(x, y)  # 获取RGB565颜色
                         # 将RGB565转换为24位BGR
                         b = (pixel_color & 0x001F) << 3
                         g = (pixel_color & 0x07E0) >> 3
@@ -1300,11 +1314,11 @@ class LoRaChatApp:
                 if time.ticks_diff(now, self.last_tx_time) > 60000:
                     self.send_message(0, "")
                 self.last_ping_time = now
-            if self.redraw_flags & 0b001: 
+            if self.redraw_flags & 0b001:
                 self.draw_system_bar()
-            if self.redraw_flags & 0b010: 
+            if self.redraw_flags & 0b010:
                 self.draw_tab_bar()
-            if self.redraw_flags & 0b100: 
+            if self.redraw_flags & 0b100:
                 self.draw_main_window()
             self.redraw_flags = 0
             gc.collect()
@@ -1324,11 +1338,11 @@ class LoRaChatApp:
                 Lcd.setFont(Widgets.FONTS.DejaVu9)
             except:
                 pass
-            
+
             # 尝试捕获完整的错误信息并输出到webterminal
             error_str = str(e)
             print("FATAL ERROR:", error_str)
-            
+
             try:
                 import io, sys
                 s = io.StringIO()
