@@ -238,11 +238,19 @@ class LoRaChatApp:
         title_width = Lcd.textWidth(title)
         Lcd.drawString(title, SX + (SW - title_width) // 2, y_pos)
 
-        # 绘制信号强度指示器
-        self._draw_rssi_indicator(SW - 70, SY + SH // 2, self.max_rssi)
+        # 绘制TX/RX和信号强度指示器 (从右向左布局)
+        batt_x = WX + WW - 30
+        rssi_x = batt_x - 40 # 在电池左侧
+        txrx_x = rssi_x - 11 # 在RSSI左侧
+
+        if time.ticks_diff(time.ticks_ms(), self.last_tx_time) < 2000:
+            self._draw_tx_indicator(txrx_x, SY + (SH // 3) - 1)
+        if time.ticks_diff(time.ticks_ms(), self.last_rx_time) < 2000:
+            self._draw_rx_indicator(txrx_x, SY + 2 * (SH // 3) - 1)
+        self._draw_rssi_indicator(rssi_x, SY + SH // 2, self.max_rssi)
 
         # 绘制电池指示器
-        self._draw_battery_indicator(SW - 30, SY + SH // 2, self.battery_pct)
+        self._draw_battery_indicator(batt_x, SY + SH // 2, self.battery_pct)
 
     def draw_tab_bar(self):
         # 简化的标签栏绘制，直接使用Lcd
@@ -666,7 +674,8 @@ class LoRaChatApp:
 
         elif 0 <= self.active_tab_index <= 2:  # 聊天窗口
             buffer = self.chat_tabs[self.active_tab_index]['buffer']
-            if key == '\r':
+            # 修复：同时接受 '\r' (回车) 和 '\n' (换行) 作为发送键，以兼容不同环境
+            if key in ['\r', '\n']:
                 self.send_message(self.active_tab_index, buffer)
                 self.chat_tabs[self.active_tab_index]['buffer'] = ""
             elif key == '\x08':
