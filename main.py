@@ -238,10 +238,9 @@ class LoRaChatApp:
         title_width = Lcd.textWidth(title)
         Lcd.drawString(title, SX + (SW - title_width) // 2, y_pos)
 
-        # 绘制TX/RX和信号强度指示器 (从右向左布局)
         batt_x = WX + WW - 30
-        rssi_x = batt_x - 40 # 在电池左侧
-        txrx_x = rssi_x - 11 # 在RSSI左侧
+        rssi_x = batt_x - 40  # 在电池左侧
+        txrx_x = rssi_x - 11  # 在RSSI左侧
 
         if time.ticks_diff(time.ticks_ms(), self.last_tx_time) < 2000:
             self._draw_tx_indicator(txrx_x, SY + (SH // 3) - 1)
@@ -261,7 +260,6 @@ class LoRaChatApp:
             color = UX_COLOR_ACCENT if i == self.active_tab_index else UX_COLOR_DARK
             taby = TY + tabm + i * tabh - i * M
 
-            # 绘制三角形和矩形
             Lcd.fillTriangle(TX + M, taby, TX + TW, taby, TX + TW, taby - tabm, color)
             Lcd.fillRect(TX + M, taby, TW - M, tabh - 2 * tabm, color)
             Lcd.fillTriangle(TX + M, taby + tabh - 2 * tabm, TX + TW, taby + tabh - 2 * tabm, TX + TW,
@@ -278,7 +276,6 @@ class LoRaChatApp:
                 label_width = Lcd.textWidth(label)
                 Lcd.drawString(label, center_x - label_width // 2, center_y)
             elif i == 3:
-                # 绘制用户图标
                 for row in range(userHeight):
                     for col in range(userWidth):
                         idx = row * userWidth + col
@@ -287,7 +284,6 @@ class LoRaChatApp:
                             Lcd.drawPixel(center_x - userWidth // 2 + col, center_y + 4 - userHeight // 2 + row,
                                           color_pixel)
             elif i == 4:
-                # 绘制扳手图标
                 for row in range(wrenchHeight):
                     for col in range(wrenchWidth):
                         idx = row * wrenchWidth + col
@@ -296,7 +292,6 @@ class LoRaChatApp:
                             Lcd.drawPixel(center_x - wrenchWidth // 2 + col, center_y + 4 - wrenchHeight // 2 + row,
                                           color_pixel)
             elif i == 5:
-                # 绘制日志图标
                 for row in range(logHeight):
                     for col in range(logWidth):
                         idx = row * logWidth + col
@@ -341,7 +336,7 @@ class LoRaChatApp:
         if not words:
             return []
 
-        Lcd.setFont(Widgets.FONTS.DejaVu9)  # 确保使用正确的字体计算宽度
+        Lcd.setFont(Widgets.FONTS.DejaVu9)
 
         for word in words:
             # 如果单词本身就超长，则强制截断
@@ -385,7 +380,6 @@ class LoRaChatApp:
         buffer_h = WH - ((font_h + M) * row_count) - M
         buffer_y = WY + WH - buffer_h + 2 * M
 
-        # 步骤 1: 先绘制历史消息
         messages = self.chat_tabs[self.active_tab_index]['messages']
         lines_drawn = 0
         for msg in reversed(messages):
@@ -421,7 +415,6 @@ class LoRaChatApp:
                         Lcd.drawString(line, WX + 2 * M + Lcd.textWidth("  "), cursor_y)  # 后续行缩进
                 lines_drawn += 1
 
-        # 步骤 2: 然后绘制输入框和输入文字
         Lcd.drawLine(WX + 10, buffer_y, WX + WW - 10, buffer_y, COLOR_GRAY)
         buffer_text = self.chat_tabs[self.active_tab_index]['buffer']
         display_buffer = buffer_text.replace(' ', ' ')
@@ -433,11 +426,7 @@ class LoRaChatApp:
 
     def draw_user_presence_window(self):
         # 直接使用Lcd绘制用户在线窗口，确保无背景色和一致的字体
-
-        # 先清除整个窗口背景
         Lcd.fillRect(WX, WY, WW, WH, COLOR_BLACK)
-
-        # 设置统一字体
         Lcd.setFont(Widgets.FONTS.DejaVu9)
 
         # 绘制标题 - 居中显示
@@ -447,7 +436,6 @@ class LoRaChatApp:
         Lcd.drawString(title, WX + (WW - title_width) // 2, WY + 10)
         Lcd.drawLine(WX, WY + 25, WX + WW, WY + 25, COLOR_GRAY)
 
-        # 绘制用户列表
         y_pos = WY + 35
         for p in self.presences:
             last_seen_sec = time.ticks_diff(time.ticks_ms(), p['last_seen']) // 1000
@@ -463,17 +451,11 @@ class LoRaChatApp:
             Lcd.setTextColor(COLOR_WHITE, COLOR_BLACK)
             Lcd.drawString(no_users_text, WX + (WW - no_users_width) // 2, WY + 50)
 
-        # 重置文本颜色和字体为默认值
         Lcd.setTextColor(COLOR_WHITE)
         Lcd.setFont(Widgets.FONTS.DejaVu12)
 
     def draw_settings_window(self):
-        # 直接使用Lcd绘制设置窗口，确保无背景色和一致的字体
-
-        # 先清除整个窗口背景
         Lcd.fillRect(WX, WY, WW, WH, COLOR_BLACK)
-
-        # 设置统一字体
         Lcd.setFont(Widgets.FONTS.DejaVu9)
 
         # 绘制标题 - 居中显示，并确保文本背景与窗口背景一致
@@ -510,7 +492,6 @@ class LoRaChatApp:
             ("Save to Conf", save_status_text)
         ]
 
-        # 实现滚动功能
         visible_settings = 4  # 一次显示的设置项数量
         if len(settings_map) > visible_settings:
             # 计算滚动位置
@@ -545,7 +526,6 @@ class LoRaChatApp:
             Lcd.setTextColor(base_color, COLOR_BLACK)
             Lcd.drawString(name_text, WX + WW // 2 - 8 - name_width + x_offset, y_pos)
 
-            # 根据设置类型设置不同的文本颜色
             status_color = None
             if i == 0:
                 status_color = base_color
@@ -564,14 +544,11 @@ class LoRaChatApp:
 
             y_pos += 20  # 适当增加行间距以提高可读性
 
-        # 重置文本颜色和字体为默认值
         Lcd.setTextColor(COLOR_WHITE)
         Lcd.setFont(Widgets.FONTS.DejaVu12)
 
     def draw_log_window(self):
         Lcd.fillRect(WX, WY, WW, WH, COLOR_BLACK)
-        Lcd.setFont(Widgets.FONTS.DejaVu9)
-        Lcd.setTextColor(COLOR_WHITE, COLOR_BLACK)
 
         title = "SD Card Log"
         title_width = Lcd.textWidth(title)
@@ -617,8 +594,6 @@ class LoRaChatApp:
         Lcd.drawString(",:Prev  /:Next  ␣:Refresh", WX + M, WY + WH - 15)
 
     def handle_input(self, key):
-        print(f"DEBUG: Key received: {repr(key)}")
-
         if self.active_tab_index == 5:  # 日志窗口
             if key == ',':  # 上一页
                 if self.log_page_index > 0:
@@ -811,7 +786,6 @@ class LoRaChatApp:
         self.log_to_sd(log_entry)
 
     def log_to_sd(self, log_entry):
-        """将单条日志追加到SD卡文件"""
         if not self.sdcard_mounted or not self.sd_log_enabled:
             return
         try:
@@ -831,7 +805,6 @@ class LoRaChatApp:
             print(f"ERROR: Failed to write to SD log: {e}")
 
     def load_log_page_from_sd(self, page_index=-1):
-        """从SD卡加载指定页的日志"""
         if not self.sdcard_mounted:
             self.log_page_cache = []
             return
@@ -907,6 +880,11 @@ class LoRaChatApp:
         key = self.kb.get_string()
         if not key:
             return
+
+        # 检查并恢复低亮度
+        if self.brightness <= 10 and key != ',':
+            self.brightness = 60
+            Lcd.setBrightness(self.brightness)
 
         self.redraw_flags = 0
         if key == '\t':
@@ -1027,30 +1005,17 @@ class LoRaChatApp:
         self.redraw_flags |= 0b111
 
     def setup(self):
-        print("DEBUG: Starting setup function...")
         M5.begin()
-        print("DEBUG: M5.begin() completed.")
         Lcd.setRotation(1)
-        print("DEBUG: Lcd.setRotation(1) completed.")
 
         # 直接使用Lcd进行绘制，不使用canvas
-        print("DEBUG: Using direct Lcd drawing instead of canvas")
         Lcd.fillScreen(BG_COLOR)
         Lcd.setTextColor(COLOR_WHITE)
         Lcd.setFont(Widgets.FONTS.DejaVu12)
         Lcd.drawString("LoRaChat App", 10, 10)
         Lcd.drawString("Loading...", 10, 30)
 
-        # 初始化SD卡
         self.initialize_sdcard()
-
-        # 逐点绘制扳手图标，替换pushImage方法
-        for row in range(wrenchHeight):
-            for col in range(wrenchWidth):
-                idx = row * wrenchWidth + col
-                color_pixel = wrenchData[idx]
-                if color_pixel != transparencyColor:
-                    Lcd.drawPixel(10 + col, 50 + row, color_pixel)
 
         try:
             self.kb = MatrixKeyboard()
@@ -1063,31 +1028,23 @@ class LoRaChatApp:
             self.espnow_init()
         else:
             self.lora_init()
-        print("DEBUG: Communication module initialized.")
 
         # 简单绘制初始UI
-        print("DEBUG: Drawing simple initial UI...")
         Lcd.fillScreen(BG_COLOR)
         Lcd.setTextColor(COLOR_WHITE)
         Lcd.setFont(Widgets.FONTS.DejaVu12)
         Lcd.drawString("LoRaChat Ready", 10, 10)
         Lcd.drawString(f"Username: {self.username}", 10, 30)
-        Lcd.drawString("Press TAB to change tabs", 10, 50)
-        Lcd.drawString("A/B/C for chat windows", 10, 70)
 
-        print("DEBUG: Simple UI drawn. Setup complete.")
         return True
 
     def initialize_sdcard(self):
         try:
             if not SDCARD_AVAILABLE:
-                print("DEBUG: SD card library not available. Skipping initialization.")
                 self.log_message("ERROR", "SD lib not found. Import from hardware.")
                 # 尝试从当前目录加载配置文件作为备选方案
                 self._try_load_config_from_alternate()
                 return
-
-            print("DEBUG: Initializing SD card for M5Cardputer using hardware library...")
 
             # 使用正确的参数初始化SD卡，与uiflow网页端编程得到的代码一致
             try:
@@ -1096,11 +1053,9 @@ class LoRaChatApp:
                 print("DEBUG: SD card initialized successfully using hardware library.")
                 # 检查是否已挂载
                 try:
-                    uos.stat("/sd")
-                    print("DEBUG: SD card already mounted at /sd")
+                    uos.stat("/sd") # This will throw OSError if not mounted
                     self.sdcard_mounted = True
                 except OSError:
-                    print("DEBUG: SD card not mounted. Hardware library should handle mounting automatically.")
                     # 尝试从当前目录加载配置文件作为备选方案
                     self._try_load_config_from_alternate()
                     return
@@ -1115,11 +1070,9 @@ class LoRaChatApp:
             # 检查并创建LoRaChat目录
             try:
                 uos.stat("/sd/LoRaChat")
-                print("DEBUG: LoRaChat directory already exists.")
             except OSError:
                 try:
                     uos.mkdir("/sd/LoRaChat")
-                    print("DEBUG: Created LoRaChat directory.")
                 except Exception as e:
                     print(f"DEBUG: Failed to create LoRaChat directory: {e}")
                     # 尝试从当前目录加载配置文件作为备选方案
@@ -1137,17 +1090,14 @@ class LoRaChatApp:
 
             # 读取配置文件（如果存在）
             try:
-                print(f"DEBUG: Trying to read config from {CONFIG_FILENAME}")
                 with open(CONFIG_FILENAME, 'r') as f:
                     lines = f.readlines()
-                    print(f"DEBUG: Read {len(lines)} lines from config file")
                     for line in lines:
                         line = line.strip()
                         if '=' in line and not line.startswith('#'):
                             key, value = line.split('=', 1)
                             key = key.strip()
                             value = value.strip().lower()
-                            print(f"DEBUG: Config - {key} = {value}")
                             # 同时支持驼峰命名和小写命名
                             if key == 'username':
                                 self.username = value
@@ -1163,14 +1113,11 @@ class LoRaChatApp:
                                 self.repeat_mode = value == 'on'
                             elif key == 'espnowmode' or key == 'espNowMode':
                                 self.espnow_mode = value == 'on'
-                print("DEBUG: Configuration loaded successfully.")
             except OSError as e:
                 print(f"DEBUG: Configuration file not found or cannot be read: {e}")
                 # 如果是第一次运行，创建默认配置文件
                 if not self.save_settings():
                     print("DEBUG: WARNING: Failed to create default configuration file.")
-                    # 尝试从当前目录加载配置文件作为备选方案
-                    self._try_load_config_from_alternate()
                 else:
                     print("DEBUG: Created default configuration file.")
 
@@ -1183,7 +1130,6 @@ class LoRaChatApp:
             self._try_load_config_from_alternate()
 
     def _try_load_config_from_alternate(self):
-        """尝试从当前目录加载配置文件作为备选方案"""
         try:
             alt_config_path = "LoRaChat.conf"
             with open(alt_config_path, 'r') as f:
@@ -1194,7 +1140,6 @@ class LoRaChatApp:
                         key, value = line.split('=', 1)
                         key = key.strip()
                         value = value.strip().lower()
-                        print(f"DEBUG: Config (alternate) - {key} = {value}")
                         # 同时支持驼峰命名和小写命名
                         if key == 'username':
                             self.username = value
@@ -1210,21 +1155,17 @@ class LoRaChatApp:
                             self.repeat_mode = value == 'on'
                         elif key == 'espnowmode' or key == 'espNowMode':
                             self.espnow_mode = value == 'on'
-            print("DEBUG: Configuration loaded from alternate location successfully.")
         except Exception as e2:
             print(f"DEBUG: Failed to load config from alternate location: {e2}")
 
     def save_settings(self):
         try:
-            print("DEBUG: Saving settings to SD card...")
-
             # 确保目录存在
             try:
                 uos.stat("/sd/LoRaChat")
             except OSError:
                 try:
                     uos.mkdir("/sd/LoRaChat")
-                    print("DEBUG: Created LoRaChat directory.")
                 except Exception as e:
                     self.log_message("ERROR", f"Cannot create dir: {e}")
                     return False
@@ -1240,28 +1181,12 @@ class LoRaChatApp:
                 f"logOutputEnabled=on\n"
             )
 
-            print(f"DEBUG: Config content to save:\n{config_content}")
-
             # 写入配置文件
             try:
                 # 尝试直接写入
                 with open(CONFIG_FILENAME, 'w') as f:
-                    bytes_written = f.write(config_content)
-                print(f"DEBUG: Settings saved successfully. Wrote {bytes_written} bytes.")
-
-                # 验证文件是否已创建
-                try:
-                    stat_info = uos.stat(CONFIG_FILENAME)
-                    print(f"DEBUG: Config file created. Size: {stat_info[6]} bytes")
-                    # 读取回文件内容进行验证
-                    try:
-                        with open(CONFIG_FILENAME, 'r') as f:
-                            saved_content = f.read()
-                            print(f"DEBUG: Verified saved content:\n{saved_content}")
-                    except Exception as e:
-                        print(f"DEBUG: Failed to read back saved file: {e}")
-                except OSError:
-                    print("DEBUG: WARNING: Config file was written but cannot be accessed.")
+                    f.write(config_content)
+                print(f"DEBUG: Settings saved to {CONFIG_FILENAME}")
 
                 self.log_message("INFO", f"Settings saved to {CONFIG_FILENAME}")
 
