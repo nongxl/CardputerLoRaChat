@@ -1,11 +1,12 @@
-Simple chat app for M5 Cardputer and the M5 E220 LoRa modules. Doing for my own learning and enjoyment. Work in progress.
+forked from nonik0/CardputerLoRaChat
+I rebuild it to surport M5-LoRa-E220 module(region:CN and EUR——the nonik0's version is for M5-LoRa-E220-JP) and add a message log page。
 
 ## Hardware used:
 - [M5 Cardputer](https://shop.m5stack.com/products/m5stack-cardputer-kit-w-m5stamps3])
-- [M5 E220 LoRa module](https://shop.m5stack.com/products/lora-unit-jp-version-with-antenna-e220) (optional if using ESP-NOW mode, see [Settings Tab Details](#settings-tab-details))
+- [M5 E220 LoRa module](https://shop.m5stack.com/products/lora-unit-433mhz-with-antenna-e220) (optional if using ESP-NOW mode, see [Settings Tab Details](#settings-tab-details))
 
 ## Overview:
-The interface is split into 5 tabs. The first three tabs are separate chat channels, the next tab shows the status of other users seen, and the last tab is for changing settings. Press the tab key to switch between tabs. The system bar shows the current username, the signal strength of the user seen with the best signal strength and incoming and outgoing messages, and the Cardputer's current battery level. LoRa modules are currently configured using the default settings from the [LoRa modules's library](https://github.com/m5stack/M5-LoRa-E220-JP). Modules must be configured initially to work, can do so in settings.
+The interface is split into 6 tabs. The first three tabs are separate chat channels, the next tab shows the status of other users seen, and the last tab is Message Log. Press the tab key to switch between tabs. The system bar shows the current username, the signal strength of the user seen with the best signal strength and incoming and outgoing messages, and the Cardputer's current battery level. LoRa modules are currently configured using the default settings from the [LoRa modules's library](https://github.com/m5stack/M5-LoRa-E220). Modules must be configured initially to work, can do so in settings.
 
 ## Tab Info
 Tab|Image|Info
