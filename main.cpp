@@ -117,6 +117,74 @@ String getHexString(const void *data, size_t size)
   return hexDump; // Return the accumulated hex dump string
 }
 
+// 将二进制数据转换为人类可读格式，对于可打印字符直接显示，非可打印字符使用十六进制表示
+String getDataString(const void *data, size_t size)
+{
+  const byte *bytes = (const byte *)(data);
+  String result = "";
+  bool hasPrintableChars = false;
+  bool hasNonPrintableChars = false;
+  String asciiPart = "";
+
+  // 检查数据中是否包含可打印和不可打印字符
+  for (size_t i = 0; i < size; ++i)
+  {
+    if (bytes[i] == 0) break; // 遇到null终止符停止
+    if (bytes[i] >= 32 && bytes[i] <= 126) // 可打印ASCII字符
+    {
+      hasPrintableChars = true;
+      asciiPart += (char)bytes[i];
+    }
+    else if (bytes[i] != 9 && bytes[i] != 10 && bytes[i] != 13) // 非可打印字符（除了制表符、换行符、回车符）
+    {
+      hasNonPrintableChars = true;
+    }
+  }
+
+  // 如果全部是可打印字符，直接返回ASCII字符串
+  if (hasPrintableChars && !hasNonPrintableChars)
+  {
+    return asciiPart;
+  }
+  // 如果有部分可打印字符，显示ASCII部分并在括号中注明包含特殊字符
+  else if (hasPrintableChars && hasNonPrintableChars)
+  {
+    // 尝试构建混合表示：可打印字符直接显示，非可打印字符用[xx]表示
+    for (size_t i = 0; i < size; ++i)
+    {
+      if (bytes[i] == 0) break; // 遇到null终止符停止
+      if (bytes[i] >= 32 && bytes[i] <= 126) // 可打印ASCII字符
+      {
+        result += (char)bytes[i];
+      }
+      else if (bytes[i] == 9) // 制表符
+      {
+        result += "\\t";
+      }
+      else if (bytes[i] == 10) // 换行符
+      {
+        result += "\\n";
+      }
+      else if (bytes[i] == 13) // 回车符
+      {
+        result += "\\r";
+      }
+      else // 其他非可打印字符
+      {
+        char hex[6];
+        snprintf(hex, sizeof(hex), "[%02x]", bytes[i]);
+        result += hex;
+      }
+    }
+    return result;
+  }
+  else
+  {
+    // 否则返回十六进制表示
+    return getHexString(data, size);
+  }
+}
+
 void saveScreenshot()
 {
   size_t pngLen;
@@ -1055,9 +1123,9 @@ bool sendMessage(int channel, const String &messageText, Message &sentMessage)
     sentMessage.isEspNow = espNowMode;
     sentMessage.rssi = 0;
 
-    // 记录发送消息的日志，包含原始十六进制帧数据
-    String rawFrameHex = getHexString(frameData, frameDataLength);
-    String logText = String("SENT ") + (espNowMode ? "ESP-NOW" : "LoRa") + ", Ch:" + String(channel) + ", Msg:" + messageText + ", Raw:" + rawFrameHex;
+    // 记录发送消息的日志，使用ASCII转换后的帧数据（如果可能）
+    String rawFrameData = getDataString(frameData, frameDataLength);
+    String logText = String("SENT ") + (espNowMode ? "ESP-NOW" : "LoRa") + ", Ch:" + String(channel) + ", Msg:" + messageText + ", Data:" + rawFrameData;
     logMessage(logText);
 
     lastTx = millis();
@@ -1134,15 +1202,15 @@ bool isNoiseFrame(const uint8_t *frameData, size_t frameDataLength, int rssi)
 
 void receiveMessage(const uint8_t *frameData, size_t frameDataLength, int rssi, bool isEspNow)
 {
-  String rawFrameHex = getHexString(frameData, frameDataLength);
-  log_w("received frame: %s", rawFrameHex.c_str());
+  String rawFrameData = getDataString(frameData, frameDataLength);
+  log_w("received frame: %s", rawFrameData.c_str());
   
   // 先检查是否为噪声帧
   bool noiseDetected = isNoiseFrame(frameData, frameDataLength, rssi);
   
   // 记录噪声检测信息
   if (noiseDetected) {
-    String noiseLog = String("[DEBUG] Noise ignored: ") + rawFrameHex + String(", RSSI: ") + String(rssi);
+    String noiseLog = String("[DEBUG] Noise ignored: ") + rawFrameData + String(", RSSI: ") + String(rssi);
     logMessage(noiseLog);
     
     // 记录详细的RSSI信息
@@ -1150,7 +1218,7 @@ void receiveMessage(const uint8_t *frameData, size_t frameDataLength, int rssi, 
     logMessage(rssiLog);
     
     // 记录原始包信息
-    String rawLog = String("[RAW] Packet: ") + rawFrameHex + String(", RSSI: ") + String(rssi);
+    String rawLog = String("[RAW] Packet: ") + rawFrameData + String(", RSSI: ") + String(rssi);
     logMessage(rawLog);
     
     // 对于噪声帧，可以直接返回，不进行后续处理
@@ -1164,15 +1232,15 @@ void receiveMessage(const uint8_t *frameData, size_t frameDataLength, int rssi, 
   lastRx = millis();
   updateDelay = 0;
 
-  // 记录接收到的消息的日志，包含原始十六进制帧数据
+  // 记录接收到的消息的日志，使用ASCII转换后的帧数据（如果可能）
   // 区分可解码和无法解码的消息
   String logText;
   if (message.text.isEmpty() || message.username.isEmpty()) {
     // 无法解码或部分解码的消息
-    logText = String("RECV ") + (isEspNow ? "ESP-NOW" : "LoRa") + ", UNKNOWN FORMAT, RSSI:" + String(rssi) + ", Raw:" + rawFrameHex;
+    logText = String("RECV ") + (isEspNow ? "ESP-NOW" : "LoRa") + ", UNKNOWN FORMAT, RSSI:" + String(rssi) + ", Data:" + rawFrameData;
   } else {
     // 正常解码的消息
-    logText = String("RECV ") + (isEspNow ? "ESP-NOW" : "LoRa") + ", Ch:" + String(message.channel) + ", From:" + message.username + ", RSSI:" + String(rssi) + ", Msg:" + message.text + ", Raw:" + rawFrameHex;
+    logText = String("RECV ") + (isEspNow ? "ESP-NOW" : "LoRa") + ", Ch:" + String(message.channel) + ", From:" + message.username + ", RSSI:" + String(rssi) + ", Msg:" + message.text + ", Data:" + rawFrameData;
   }
   logMessage(logText);
 
