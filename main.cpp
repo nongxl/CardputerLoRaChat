@@ -4,6 +4,8 @@
 #include <M5_LoRa_E220.h>
 #include <SD.h>
 #include <WiFi.h>
+#include <time.h>
+#include <sys/time.h>
 
 #include "common.h"
 #include "draw_helper.h"
@@ -586,7 +588,17 @@ void drawLogWindow()
   // 如果日志缓存为空，尝试从SD卡加载
   if (cachedLogEntries.empty())
   {
-    loadLogPageFromSd(0);
+    // 显示加载中的提示
+    canvas->setTextColor(COLOR_LIGHTGRAY);
+    canvas->setTextDatum(TC_DATUM); // 使用TC_DATUM代替center_center
+    canvas->drawString("Loading logs...", ww / 2, wh / 2);
+    canvas->pushSprite(wx, wy); // 先显示加载提示
+    
+    // 切换回文本对齐方式
+    canvas->setTextDatum(TL_DATUM); // 使用TL_DATUM代替top_left
+    
+    // 加载最新的日志页
+    loadLogPageFromSd(totalLogPages - 1);
   }
 
   // 绘制日志内容
@@ -594,40 +606,33 @@ void drawLogWindow()
   int entryYOffset = 4 * m + canvas->fontHeight();
   int linesDrawn = 0;
   
-  // 计算当前页的起始和结束索引
-  int startIndex = cachedLogEntries.size() - (currentLogPage + 1) * MAX_LOG_LINES_PER_PAGE;
-  if (startIndex < 0) startIndex = 0;
-  int endIndex = startIndex + MAX_LOG_LINES_PER_PAGE;
-  if (endIndex > cachedLogEntries.size()) endIndex = cachedLogEntries.size();
-  
-  for (int i = startIndex; i < endIndex; i++)
+  // 由于我们已经在loadLogPageFromSd中加载了当前页的数据
+  // 这里可以直接使用cachedLogEntries中的所有数据
+  for (int i = 0; i < cachedLogEntries.size(); i++)
   {
-    if (i >= 0 && i < cachedLogEntries.size())
-    {
-      int y = entryYOffset + linesDrawn * lineHeight;
+    int y = entryYOffset + linesDrawn * lineHeight;
+    
+    // 绘制时间戳（灰色）
+    canvas->setTextColor(COLOR_LIGHTGRAY);
+    canvas->drawString(cachedLogEntries[i].timestamp, 2 * m, y);
+    
+    // 计算内容区域的最大宽度
+    int timestampWidth = canvas->fontWidth() * cachedLogEntries[i].timestamp.length();
+    int contentMaxWidth = ww - 4 * m - timestampWidth;
+    
+    // 获取日志内容的多行显示
+    std::vector<String> contentLines = getMessageLines(cachedLogEntries[i].content, contentMaxWidth / canvas->fontWidth());
+    
+    // 绘制日志内容（银色）
+    canvas->setTextColor(TFT_SILVER);
+    for (const String& line : contentLines) {
+      canvas->drawString(line, 3 * m + timestampWidth, y);
+      y += lineHeight;
+      linesDrawn++;
       
-      // 绘制时间戳（灰色）
-      canvas->setTextColor(COLOR_LIGHTGRAY);
-      canvas->drawString(cachedLogEntries[i].timestamp, 2 * m, y);
-      
-      // 计算内容区域的最大宽度
-      int timestampWidth = canvas->fontWidth() * cachedLogEntries[i].timestamp.length();
-      int contentMaxWidth = ww - 4 * m - timestampWidth;
-      
-      // 获取日志内容的多行显示
-      std::vector<String> contentLines = getMessageLines(cachedLogEntries[i].content, contentMaxWidth / canvas->fontWidth());
-      
-      // 绘制日志内容（银色）
-      canvas->setTextColor(TFT_SILVER);
-      for (const String& line : contentLines) {
-        canvas->drawString(line, 3 * m + timestampWidth, y);
-        y += lineHeight;
-        linesDrawn++;
-        
-        // 确保不会超出页面高度，留出足够空间给底部操作提示
-          //if (y > wh - 25) {
-            //break;
-          //}
+      // 确保不会超出页面高度，留出足够空间给底部操作提示
+      if (y > wh - 25) {
+        break;
       }
     }
   }
@@ -639,7 +644,7 @@ void drawLogWindow()
   
   // 绘制操作提示
   canvas->setTextDatum(bottom_left);
-  canvas->drawString(",:Prev  /:Next  ␣:Refresh", 2 * m, wh - 2 * m);
+  canvas->drawString(",:Prev /:Next ␣:Refresh", 2 * m, wh - 2 * m);
 }
 
 void drawMainWindow()
@@ -686,6 +691,52 @@ bool sdCardInit()
   return sdInit;
 }
 
+// 缓存的日志索引
+
+// 缓存的日志索引
+std::vector<uint32_t> logLineOffsets;
+
+// 构建日志文件的行偏移索引
+void buildLogLineIndex() {
+  if (!sdInit) return;
+  
+  File logFile = SD.open(LOG_FILE_PATH, FILE_READ);
+  if (!logFile) {
+    log_e("Failed to open log file for indexing: %s", LOG_FILE_PATH);
+    return;
+  }
+  
+  logLineOffsets.clear();
+  uint32_t currentOffset = 0;
+  
+  // 记录第一行的偏移量
+  logLineOffsets.push_back(0);
+  
+  // 逐字节读取文件，查找换行符
+  while (logFile.available()) {
+    char c = logFile.read();
+    currentOffset++;
+    if (c == '\n') {
+      // 记录下一行的偏移量
+      logLineOffsets.push_back(currentOffset);
+      
+      // 限制索引大小，防止内存溢出
+      if (logLineOffsets.size() > MAX_CACHED_LOG_LINES + 1) {
+        // 如果索引超过最大缓存行数，只保留最新的行偏移
+        std::vector<uint32_t> newOffsets;
+        int startIdx = logLineOffsets.size() - (MAX_CACHED_LOG_LINES + 1);
+        for (int i = startIdx; i < logLineOffsets.size(); i++) {
+          newOffsets.push_back(logLineOffsets[i]);
+        }
+        logLineOffsets = newOffsets;
+      }
+    }
+  }
+  
+  logFile.close();
+}
+
+// 从日志文件加载指定页面的数据
 void loadLogPageFromSd(int page)
 {
   if (!sdInit)
@@ -705,21 +756,62 @@ void loadLogPageFromSd(int page)
       logFile.close();
     }
     cachedLogEntries.clear();
+    logLineOffsets.clear();
     totalLogPages = 0;
     currentLogPage = 0;
     return;
   }
 
+  // 如果日志索引为空，构建索引
+  if (logLineOffsets.empty()) {
+    buildLogLineIndex();
+  }
+  
+  // 计算总行数和总页数（从索引获取，避免重复读取整个文件）
+  int totalLines = logLineOffsets.size() > 0 ? logLineOffsets.size() - 1 : 0;
+  
+  // 限制缓存的最大行数
+  int maxVisibleLines = (totalLines < MAX_CACHED_LOG_LINES) ? totalLines : MAX_CACHED_LOG_LINES; // 用三元运算符代替MIN宏
+  totalLogPages = (maxVisibleLines + MAX_LOG_LINES_PER_PAGE - 1) / MAX_LOG_LINES_PER_PAGE;
+  if (totalLogPages == 0) totalLogPages = 1;
+  
+  // 确保页码有效
+  currentLogPage = page;
+  if (currentLogPage < 0) currentLogPage = 0; // 最旧的一页
+  if (currentLogPage >= totalLogPages) currentLogPage = totalLogPages - 1; // 最新的一页
+  
+  // 计算要加载的起始和结束行索引
+  // 修改为：页面索引0对应最旧的日志，页面索引totalLogPages-1对应最新的日志
+  int startLineIndex = currentLogPage * MAX_LOG_LINES_PER_PAGE;
+  int endLineIndex = (currentLogPage + 1) * MAX_LOG_LINES_PER_PAGE;
+  
+  // 调整边界条件
+  if (startLineIndex < 0) startLineIndex = 0;
+  if (endLineIndex > totalLines) endLineIndex = totalLines;
+  
+  // 如果没有需要加载的行，清除缓存并返回
+  if (startLineIndex >= endLineIndex) {
+    cachedLogEntries.clear();
+    return;
+  }
+  
   File logFile = SD.open(LOG_FILE_PATH, FILE_READ);
   if (!logFile)
   {
     log_e("Failed to open log file: %s", LOG_FILE_PATH);
     return;
   }
-
-  // 读取所有日志条目
+  
+  // 清空缓存，准备加载新页面
   cachedLogEntries.clear();
-  while (logFile.available())
+  
+  // 从索引获取文件偏移量并定位到指定位置
+  uint32_t startOffset = logLineOffsets[startLineIndex];
+  logFile.seek(startOffset);
+  
+  // 读取指定范围的日志行
+  int linesRead = 0;
+  while (logFile.available() && linesRead < (endLineIndex - startLineIndex))
   {
     String line = logFile.readStringUntil('\n');
     if (line.length() > 0)
@@ -730,19 +822,19 @@ void loadLogPageFromSd(int page)
         String timestamp = line.substring(0, timestampEnd);
         String content = line.substring(timestampEnd + 1);
         cachedLogEntries.push_back({timestamp, content});
+        linesRead++;
       }
     }
   }
-  logFile.close();
-
-  // 计算总页数
-  totalLogPages = (cachedLogEntries.size() + MAX_LOG_LINES_PER_PAGE - 1) / MAX_LOG_LINES_PER_PAGE;
-  if (totalLogPages == 0) totalLogPages = 1;
   
-  // 确保页码有效
-  currentLogPage = page;
-  if (currentLogPage < 0) currentLogPage = totalLogPages - 1;
-  if (currentLogPage >= totalLogPages) currentLogPage = 0;
+  logFile.close();
+}
+
+// 更新日志索引（在添加新日志时调用）
+void updateLogIndex() {
+  // 当有新日志添加时，重建索引或更新索引
+  // 简化实现：直接重建索引（更可靠但不是最优的）
+  buildLogLineIndex();
 }
 
 void logMessage(const String &message)
@@ -759,10 +851,10 @@ void logMessage(const String &message)
   time_t now = time(nullptr);
   struct tm timeinfo;
   localtime_r(&now, &timeinfo);
-  char timestamp[20];
-  sprintf(timestamp, "%04d-%02d-%02d %02d:%02d:%02d", 
-          timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
-          timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+  char timestamp[13];
+  sprintf(timestamp, "%02d-%02d %02d:%02d:%02d",
+  timeinfo.tm_mon + 1, timeinfo.tm_mday,
+  timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
 
   // 打开文件并追加日志
   File logFile = SD.open(LOG_FILE_PATH, FILE_APPEND);
@@ -771,6 +863,9 @@ void logMessage(const String &message)
     logFile.println(String(timestamp) + " " + message);
     logFile.flush();
     logFile.close();
+    
+    // 更新日志索引，确保下次加载时能正确定位新添加的日志行
+    updateLogIndex();
   }
   else
   {
@@ -907,20 +1002,36 @@ void createFrame(int channel, const String &messageText, uint8_t *frameData, siz
 
 void parseFrame(const uint8_t *frameData, size_t frameDataLength, Message &message)
 {
-  if (frameDataLength < (1 + MinUsernameLength + 1) || frameDataLength > (1 + MaxUsernameLength + 1 + MaxMessageLength + 1)) // TODO: test
+  // 初始化消息结构
+  message.nonce = 0;
+  message.channel = 0;
+  message.username = "";
+  message.text = "";
+  
+  // 检查帧长度是否有效
+  if (frameDataLength < (1 + MinUsernameLength + 1) || frameDataLength > (1 + MaxUsernameLength + 1 + MaxMessageLength + 1)) {
+    log_w("invalid frame length: %d", frameDataLength);
     return;
+  }
 
   size_t frameBytesRead = 0;
 
+  // 解析头部信息
   message.nonce = (frameData[0] & 0x3F);
   message.channel = ((frameData[0] >> 6) & 0x03);
   frameBytesRead += 1;
 
-  message.username = String((const char *)(frameData + frameBytesRead), MaxUsernameLength).c_str();
-  frameBytesRead += message.username.length() + 1;
+  // 解析用户名
+  if (frameBytesRead < frameDataLength && frameData[frameBytesRead] != '\0') {
+    message.username = String((const char *)(frameData + frameBytesRead), MaxUsernameLength).c_str();
+    frameBytesRead += message.username.length() + 1;
+  }
 
-  size_t messageLength = frameDataLength - frameBytesRead;
-  message.text = String((const char *)(frameData + frameBytesRead), messageLength).c_str();
+  // 解析消息文本
+  if (frameBytesRead < frameDataLength) {
+    size_t messageLength = frameDataLength - frameBytesRead;
+    message.text = String((const char *)(frameData + frameBytesRead), messageLength).c_str();
+  }
 
   log_w("parsed frame: |%d|%d|%s|%s|", message.channel, message.nonce, message.username, message.text.c_str());
 }
@@ -944,8 +1055,9 @@ bool sendMessage(int channel, const String &messageText, Message &sentMessage)
     sentMessage.isEspNow = espNowMode;
     sentMessage.rssi = 0;
 
-    // 记录发送消息的日志
-    String logText = String("SENT ") + (espNowMode ? "ESP-NOW" : "LoRa") + ", Ch:" + String(channel) + ", Msg:" + messageText;
+    // 记录发送消息的日志，包含原始十六进制帧数据
+    String rawFrameHex = getHexString(frameData, frameDataLength);
+    String logText = String("SENT ") + (espNowMode ? "ESP-NOW" : "LoRa") + ", Ch:" + String(channel) + ", Msg:" + messageText + ", Raw:" + rawFrameHex;
     logMessage(logText);
 
     lastTx = millis();
@@ -964,9 +1076,86 @@ bool sendMessage(int channel, const String &messageText, Message &sentMessage)
   return false;
 }
 
+// 检测是否为噪声帧
+bool isNoiseFrame(const uint8_t *frameData, size_t frameDataLength, int rssi)
+{
+  // 条件1: RSSI值异常（这里假设RSSI为1是异常值，根据实际情况调整）
+  if (rssi == 1) {
+    return true;
+  }
+  
+  // 条件2: 帧太短
+  if (frameDataLength < 3) {
+    return true;
+  }
+  
+  // 条件3: 全是相同的字节（如全FF、全0等）
+  bool allSame = true;
+  uint8_t firstByte = frameData[0];
+  for (size_t i = 1; i < frameDataLength; i++) {
+    if (frameData[i] != firstByte) {
+      allSame = false;
+      break;
+    }
+  }
+  if (allSame && (firstByte == 0xFF || firstByte == 0x00)) {
+    return true;
+  }
+  
+  // 条件4: 检查是否包含有效ASCII文本（特别是用户名部分）
+  // 如果帧包含可打印ASCII字符（字母数字等），很可能是有效帧
+  int printableCharCount = 0;
+  int invalidCharCount = 0;
+  
+  for (size_t i = 0; i < frameDataLength; i++) {
+    // 头部字节（第一个字节）可以包含特殊值，不参与可打印字符统计
+    if (i == 0) continue;
+    
+    // 检查是否为可打印ASCII字符或null终止符
+    if ((frameData[i] >= 0x20 && frameData[i] <= 0x7E) || frameData[i] == 0x00) {
+      if (frameData[i] != 0x00) printableCharCount++;
+    } else {
+      invalidCharCount++;
+    }
+  }
+  
+  // 如果有足够多的可打印字符，不是噪声帧
+  if (printableCharCount >= 3) { // 至少有3个可打印字符，可能是用户名的一部分
+    return false;
+  }
+  
+  // 条件5: 包含无效的控制字符比例过高（仅当没有足够多的可打印字符时检查）
+  if (frameDataLength > 1 && (float)invalidCharCount / (frameDataLength - 1) > 0.5) { // 超过50%的非头部字符是无效的
+    return true;
+  }
+  
+  return false;
+}
+
 void receiveMessage(const uint8_t *frameData, size_t frameDataLength, int rssi, bool isEspNow)
 {
-  log_w("received frame: %s", getHexString(frameData, frameDataLength).c_str());
+  String rawFrameHex = getHexString(frameData, frameDataLength);
+  log_w("received frame: %s", rawFrameHex.c_str());
+  
+  // 先检查是否为噪声帧
+  bool noiseDetected = isNoiseFrame(frameData, frameDataLength, rssi);
+  
+  // 记录噪声检测信息
+  if (noiseDetected) {
+    String noiseLog = String("[DEBUG] Noise ignored: ") + rawFrameHex + String(", RSSI: ") + String(rssi);
+    logMessage(noiseLog);
+    
+    // 记录详细的RSSI信息
+    String rssiLog = String("[LORA] RSSI: ") + String(rssi);
+    logMessage(rssiLog);
+    
+    // 记录原始包信息
+    String rawLog = String("[RAW] Packet: ") + rawFrameHex + String(", RSSI: ") + String(rssi);
+    logMessage(rawLog);
+    
+    // 对于噪声帧，可以直接返回，不进行后续处理
+    return;
+  }
 
   Message message;
   parseFrame(frameData, frameDataLength, message);
@@ -975,9 +1164,21 @@ void receiveMessage(const uint8_t *frameData, size_t frameDataLength, int rssi, 
   lastRx = millis();
   updateDelay = 0;
 
+  // 记录接收到的消息的日志，包含原始十六进制帧数据
+  // 区分可解码和无法解码的消息
+  String logText;
+  if (message.text.isEmpty() || message.username.isEmpty()) {
+    // 无法解码或部分解码的消息
+    logText = String("RECV ") + (isEspNow ? "ESP-NOW" : "LoRa") + ", UNKNOWN FORMAT, RSSI:" + String(rssi) + ", Raw:" + rawFrameHex;
+  } else {
+    // 正常解码的消息
+    logText = String("RECV ") + (isEspNow ? "ESP-NOW" : "LoRa") + ", Ch:" + String(message.channel) + ", From:" + message.username + ", RSSI:" + String(rssi) + ", Msg:" + message.text + ", Raw:" + rawFrameHex;
+  }
+  logMessage(logText);
+
   // TODO: check nonce, replay for basic meshing
 
-  if (recordPresence(message) && !repeatMode && millis() - lastTx > 1000)
+  if (!message.username.isEmpty() && recordPresence(message) && !repeatMode && millis() - lastTx > 1000)
   {
     log_w("new presence, sending response ping");
     Message sentMessage;
@@ -986,10 +1187,6 @@ void receiveMessage(const uint8_t *frameData, size_t frameDataLength, int rssi, 
 
   if (message.text.isEmpty())
     return;
-
-  // 记录接收到的消息的日志
-  String logText = String("RECV ") + (isEspNow ? "ESP-NOW" : "LoRa") + ", Ch:" + String(message.channel) + ", From:" + message.username + ", RSSI:" + String(rssi) + ", Msg:" + message.text;
-  logMessage(logText);
 
   chatTab[message.channel].messages.push_back(message);
   receivedMessage = true;
@@ -1365,7 +1562,7 @@ void keyboardInputTask(void *pvParameters)
         lastKeyPressMillis = millis();
 
         // need to see again with display off
-        if (brightness <= 20 && !M5Cardputer.Keyboard.isKeyPressed(','))
+        if (brightness <= 10 && !M5Cardputer.Keyboard.isKeyPressed(','))
         {
           brightness = 50;
           M5Cardputer.Display.setBrightness(brightness);
@@ -1389,22 +1586,21 @@ void keyboardInputTask(void *pvParameters)
           {
             if (c == ',')
             {
-              // 上一页
+              // 上一页（更旧的日志）
               loadLogPageFromSd(currentLogPage - 1);
               redrawFlags |= RedrawFlags::MainWindow;
               break;
             }
             else if (c == '/')
             {
-              // 下一页
+              // 下一页（更新的日志）
               loadLogPageFromSd(currentLogPage + 1);
               redrawFlags |= RedrawFlags::MainWindow;
               break;
             }
-            else if (c == ' ')
-            {
-              // 刷新到最新页
-              loadLogPageFromSd(cachedLogEntries.size() / MAX_LOG_LINES_PER_PAGE);
+            else if (c == ' ') {
+              // 刷新并跳转到最新页
+              loadLogPageFromSd(totalLogPages - 1);
               redrawFlags |= RedrawFlags::MainWindow;
               break;
             }
@@ -1433,6 +1629,187 @@ void keyboardInputTask(void *pvParameters)
   }
 }
 
+// 时间设置函数
+void setupDateTime() {
+  // 创建一个临时画布用于双缓冲，避免闪烁
+  M5Canvas dateTimeCanvas(&M5Cardputer.Display);
+  dateTimeCanvas.createSprite(ww, wh);
+  
+  // 使用支持中文的字体设置
+  dateTimeCanvas.setTextSize(1);
+  dateTimeCanvas.setTextColor(WHITE);
+  
+  // 当前时间组件
+  int year = 2025;  // 默认年份
+  int month = 10;    // 默认月份
+  int day = 16;      // 默认日期
+  int hour = 14;    // 默认小时
+  int minute = 30;   // 默认分钟
+  int second = 30;   // 默认秒数
+  int currentField = 0;  // 0:year, 1:month, 2:day, 3:hour, 4:minute, 5:second
+  
+  bool settingDone = false;
+  const unsigned long debounceDelay = 200;
+  unsigned long lastKeyPressMillis = 0;
+  int prevYear = -1, prevMonth = -1, prevDay = -1;
+  int prevHour = -1, prevMinute = -1, prevSecond = -1;
+  int prevField = -1;
+  
+  // 初始清屏
+  dateTimeCanvas.fillScreen(BLACK);
+  dateTimeCanvas.setCursor(10, 20);
+  // 使用英文替代中文，避免字体问题
+  dateTimeCanvas.print("Set Date & Time");
+  
+  // 更新提示信息，反映新的操作方式（分成两行，移到更高位置）
+  dateTimeCanvas.setCursor(10, 90);
+  dateTimeCanvas.setTextColor(GREEN);
+  dateTimeCanvas.print(",:<-- /:--> ;:Increase -:Decrease");
+  dateTimeCanvas.setCursor(10, 105);
+  dateTimeCanvas.print("TAB:Next ENTER:Confirm");
+  
+  // 初始推送到屏幕
+  dateTimeCanvas.pushSprite(0, 0);
+  
+  while (!settingDone) {
+    bool needsUpdate = false;
+    
+    // 检查是否需要更新显示
+    if (year != prevYear || month != prevMonth || day != prevDay || 
+        hour != prevHour || minute != prevMinute || second != prevSecond || 
+        currentField != prevField) {
+      needsUpdate = true;
+      
+      // 更新前一次的值
+      prevYear = year; prevMonth = month; prevDay = day;
+      prevHour = hour; prevMinute = minute; prevSecond = second;
+      prevField = currentField;
+    }
+    
+    if (needsUpdate) {
+      // 扩大清除区域，确保完全清除旧的焦点高亮
+      dateTimeCanvas.fillRect(0, 0, 240, 240, BLACK);
+      
+      // 重新绘制标题
+      dateTimeCanvas.setCursor(80, 20);
+      dateTimeCanvas.setTextColor(WHITE);
+      dateTimeCanvas.print("Set Date & Time");
+      
+      // 重新绘制提示信息，分成两行以确保完整显示
+      dateTimeCanvas.setCursor(10, 90);
+      dateTimeCanvas.setTextColor(GREEN);
+      dateTimeCanvas.print(",:<-- /:--> ;:Increase -:Decrease");
+      dateTimeCanvas.setCursor(10, 105);
+      dateTimeCanvas.print("TAB:Next ENTER:Confirm");
+      
+      // 绘制年月日（向上调整位置）
+      dateTimeCanvas.setCursor(20, 45);
+      dateTimeCanvas.setTextColor(currentField == 0 ? YELLOW : WHITE);
+      dateTimeCanvas.printf("%04d", year);
+      dateTimeCanvas.setTextColor(WHITE);
+      dateTimeCanvas.print("-");
+      
+      dateTimeCanvas.setTextColor(currentField == 1 ? YELLOW : WHITE);
+      dateTimeCanvas.printf("%02d", month);
+      dateTimeCanvas.setTextColor(WHITE);
+      dateTimeCanvas.print("-");
+      
+      dateTimeCanvas.setTextColor(currentField == 2 ? YELLOW : WHITE);
+      dateTimeCanvas.printf("%02d", day);
+      
+      // 绘制时分秒（向上调整位置）
+      dateTimeCanvas.setCursor(20, 65);
+      dateTimeCanvas.setTextColor(currentField == 3 ? YELLOW : WHITE);
+      dateTimeCanvas.printf("%02d", hour);
+      dateTimeCanvas.setTextColor(WHITE);
+      dateTimeCanvas.print(":");
+      
+      dateTimeCanvas.setTextColor(currentField == 4 ? YELLOW : WHITE);
+      dateTimeCanvas.printf("%02d", minute);
+      dateTimeCanvas.setTextColor(WHITE);
+      dateTimeCanvas.print(":");
+      
+      dateTimeCanvas.setTextColor(currentField == 5 ? YELLOW : WHITE);
+      dateTimeCanvas.printf("%02d", second);
+      
+      // 使用pushSprite一次性更新屏幕，减少闪烁
+      dateTimeCanvas.pushSprite(0, 0);
+    }
+    
+    // 处理按键输入
+    M5Cardputer.update();
+    if (M5Cardputer.Keyboard.isChange() && millis() - lastKeyPressMillis >= debounceDelay) {
+      lastKeyPressMillis = millis();
+      
+      Keyboard_Class::KeysState keyState = M5Cardputer.Keyboard.keysState();
+      
+      for (auto c : keyState.word) {
+        if (c == ',') {
+          // 向左切换输入焦点
+          currentField = (currentField - 1 + 6) % 6;
+        } else if (c == '/') {
+          // 向右切换输入焦点
+          currentField = (currentField + 1) % 6;
+        } else if (c == ';') {
+          // 增加当前字段的值
+          switch (currentField) {
+            case 0: year = min(2030, year + 1); break;
+            case 1: month = min(12, month + 1); break;
+            case 2: day = min(31, day + 1); break;
+            case 3: hour = (hour + 1) % 24; break;
+            case 4: minute = (minute + 1) % 60; break;
+            case 5: second = (second + 1) % 60; break;
+          }
+        } else if (c == '.') {
+          // 减少当前字段的值
+          switch (currentField) {
+            case 0: year = max(2020, year - 1); break;
+            case 1: month = max(1, month - 1); break;
+            case 2: day = max(1, day - 1); break;
+            case 3: hour = (hour - 1 + 24) % 24; break;
+            case 4: minute = (minute - 1 + 60) % 60; break;
+            case 5: second = (second - 1 + 60) % 60; break;
+          }
+        }
+      }
+      
+      if (keyState.tab) {
+        // 保留tab键向右切换功能
+        currentField = (currentField + 1) % 6;
+      }
+      
+      if (keyState.enter) {
+        // 确认设置，设置系统时间
+        struct tm timeinfo;
+        timeinfo.tm_year = year - 1900;
+        timeinfo.tm_mon = month - 1;
+        timeinfo.tm_mday = day;
+        timeinfo.tm_hour = hour;
+        timeinfo.tm_min = minute;
+        timeinfo.tm_sec = second;
+        timeinfo.tm_isdst = -1;  // 不使用夏令时
+        
+        time_t epoch = mktime(&timeinfo);
+        if (epoch > 0) {
+          struct timeval tv;
+          tv.tv_sec = epoch;
+          tv.tv_usec = 0;
+          settimeofday(&tv, NULL);
+          // 使用英文日志信息
+          logMessage("System time set: " + String(year) + "-" + String(month) + "-" + String(day) + " " + String(hour) + ":" + String(minute) + ":" + String(second));
+        }
+        
+        settingDone = true;
+      }
+    }
+    
+    delay(10);
+  }
+  
+  // 释放临时画布资源
+  dateTimeCanvas.deleteSprite();
+}
+
 void setup()
 {
   USBSerial.begin(115200);
@@ -1441,6 +1818,12 @@ void setup()
 
   M5Cardputer.Display.init();
   M5Cardputer.Display.setRotation(1);
+  
+  // 初始化时间库
+  time_t now = time(nullptr);
+  if (now < 1000000000) {  // 如果时间无效（1970年前）
+    setupDateTime();  // 运行时间设置
+  }
 
   canvas = new M5Canvas(&M5Cardputer.Display);
   canvas->createSprite(ww, wh);

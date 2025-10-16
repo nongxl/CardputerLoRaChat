@@ -77,6 +77,7 @@ typedef struct {
 
 // Log related constants and variables
 #define LOG_FILE_PATH "/LoRaChat/logs.txt"
+#define LOG_INDEX_PATH "/LoRaChat/logs.index"
 
 // Maximum number of log lines per page
 #define MAX_LOG_LINES_PER_PAGE 4
